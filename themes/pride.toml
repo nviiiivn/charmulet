@@ -1,0 +1,16 @@
+# Pride — pink/purple/fuchsia-orange on black. Lesbian-flag leaning, loud.
+name = "pride"
+
+[colors]
+background = "#0d0b10"
+foreground = "#f6eef7"
+accent = "#ff4fa3"
+secondary = "#b57bff"
+tertiary = "#ff8a5c"
+muted = "#8d7fa8"
+tab_active_bg = "#ff2e88"
+tab_active_fg = "#ffffff"
+tab_inactive_bg = "#241631"
+tab_inactive_fg = "#b9a6d6"
+status_bg = "#3a1c52"
+status_fg = "#f2d9e6"

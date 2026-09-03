@@ -1,4 +1,4 @@
-// Package theme loads cartridge skin definitions (TOML) into lipgloss styles.
+// Package theme loads skin definitions (TOML) into lipgloss styles.
 // Themes are pure data: swapping one re-styles the whole shell.
 package theme
 
@@ -17,6 +17,7 @@ type colors struct {
 	Foreground    string `toml:"foreground"`
 	Accent        string `toml:"accent"`
 	Secondary     string `toml:"secondary"`
+	Tertiary      string `toml:"tertiary"`
 	Muted         string `toml:"muted"`
 	TabActiveBG   string `toml:"tab_active_bg"`
 	TabActiveFG   string `toml:"tab_active_fg"`
@@ -33,13 +34,13 @@ type Theme struct {
 
 func Default() Theme {
 	return Theme{
-		Name: "builtin",
+		Name: "pride",
 		Colors: colors{
-			Background: "#1a1a2e", Foreground: "#e0e0e0", Accent: "#e43b44",
-			Secondary: "#2de2e6", Muted: "#565f89",
-			TabActiveBG: "#e43b44", TabActiveFG: "#ffffff",
-			TabInactiveBG: "#16213e", TabInactiveFG: "#8b9bb4",
-			StatusBG: "#16213e", StatusFG: "#e0e0e0",
+			Background: "#0d0b10", Foreground: "#f6eef7", Accent: "#ff4fa3",
+			Secondary: "#b57bff", Tertiary: "#ff8a5c", Muted: "#8d7fa8",
+			TabActiveBG: "#ff2e88", TabActiveFG: "#ffffff",
+			TabInactiveBG: "#241631", TabInactiveFG: "#b9a6d6",
+			StatusBG: "#3a1c52", StatusFG: "#f2d9e6",
 		},
 	}
 }
@@ -72,6 +73,9 @@ func (t Theme) StatusBar() lipgloss.Style { return t.base(t.Colors.StatusFG, t.C
 func (t Theme) Accent() lipgloss.Style    { return t.base("#ffffff", t.Colors.Accent) }
 func (t Theme) Secondary() lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(t.Colors.Secondary))
+}
+func (t Theme) Tertiary() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(t.Colors.Tertiary))
 }
 func (t Theme) Muted() lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(t.Colors.Muted))

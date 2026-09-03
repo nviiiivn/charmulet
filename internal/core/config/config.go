@@ -55,7 +55,7 @@ func Load() (*Config, error) {
 		cfg.DataDir = filepath.Dir(p)
 	}
 	if cfg.Theme == "" {
-		cfg.Theme = "cartridge"
+		cfg.Theme = "pride"
 	}
 	if cfg.OllamaURL == "" {
 		if v := os.Getenv("CHARMULET_OLLAMA_URL"); v != "" {

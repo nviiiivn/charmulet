@@ -16,15 +16,23 @@ import (
 	"github.com/nvii/charmulet/internal/tui/tabs/chat"
 	filestabs "github.com/nvii/charmulet/internal/tui/tabs/files"
 	"github.com/nvii/charmulet/internal/tui/tabs/runs"
+	servicestabs "github.com/nvii/charmulet/internal/tui/tabs/services"
 	"github.com/nvii/charmulet/internal/tui/theme"
 )
 
 func loadTheme() theme.Theme {
-	th, err := theme.Load(filepath.Join("themes", "cartridge.toml"))
+	th, err := theme.Load(filepath.Join("themes", "pride.toml"))
 	if err != nil {
 		return theme.Default()
 	}
 	return th
+}
+
+func dashURL() string {
+	if v := os.Getenv("CHARMULET_DASHBORED_URL"); v != "" {
+		return v
+	}
+	return "http://localhost:6900"
 }
 
 func main() {
@@ -48,6 +56,7 @@ func main() {
 				chat.New(th, prov, cfg.ChatModel),
 				filestabs.New(th),
 				runs.New(th, prov),
+				servicestabs.New(th, dashURL()),
 			)
 			p := tea.NewProgram(m)
 			_, err = p.Run()
