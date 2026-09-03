@@ -15,6 +15,7 @@ import (
 	"github.com/nvii/charmulet/internal/tui/shell"
 	"github.com/nvii/charmulet/internal/tui/tabs/chat"
 	filestabs "github.com/nvii/charmulet/internal/tui/tabs/files"
+	frontstabs "github.com/nvii/charmulet/internal/tui/tabs/fronts"
 	"github.com/nvii/charmulet/internal/tui/tabs/runs"
 	servicestabs "github.com/nvii/charmulet/internal/tui/tabs/services"
 	"github.com/nvii/charmulet/internal/tui/theme"
@@ -57,6 +58,7 @@ func main() {
 				filestabs.New(th),
 				runs.New(th, prov),
 				servicestabs.New(th, dashURL()),
+				frontstabs.New(th),
 			)
 			p := tea.NewProgram(m)
 			_, err = p.Run()
