@@ -1,3 +1,4 @@
-charmulet
+/charmulet
 *.gif
 dist/
+.slim/deepwork/

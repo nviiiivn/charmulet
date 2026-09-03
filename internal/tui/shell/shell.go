@@ -25,6 +25,7 @@ type Model struct {
 	w, h   int
 	th     theme.Theme
 	status string // transient message line (errors etc.)
+	help   bool   // help overlay screen
 }
 
 var _ tea.Model = (*Model)(nil)
@@ -56,8 +57,22 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		switch msg.String() {
-		case "ctrl+c", "esc":
+		case "ctrl+c":
 			return m, tea.Quit
+		case "esc":
+			if m.help {
+				m.help = false
+				return m, nil
+			}
+			return m, tea.Quit
+		case "?":
+			m.help = !m.help
+			return m, nil
+		}
+		if m.help {
+			return m, nil // overlay swallows everything else
+		}
+		switch msg.String() {
 		case "tab":
 			m.Active().Deactivate()
 			m.active = (m.active + 1) % len(m.tabs)
@@ -94,6 +109,45 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 type errMsg struct{ err error }
 
+// overlay draws the help screen centered over a dimmed body.
+func (m *Model) overlay(body string) string {
+	rows := []string{
+		m.th.TabActive().Render(" CHARMULET "),
+		"",
+		m.th.Accent().Render("tabs") + "   tab / shift+tab cycle · 1-9 jump",
+		m.th.Accent().Render("chat") + "   enter send · esc cancel stream",
+		m.th.Accent().Render("files") + "  j/k move · enter open · r refresh",
+		m.th.Accent().Render("viewer") + " esc/q close file",
+		"",
+		m.th.Muted().Render("? close this screen · ctrl+c quit"),
+	}
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.th.AccentColor()).
+		Padding(1, 3).
+		Render(strings.Join(rows, "\n"))
+
+	bw := lipgloss.Width(box)
+	bh := lipgloss.Height(box)
+	lines := strings.Split(body, "\n")
+	top := max(0, (m.h-bh)/2)
+	left := max(0, (m.w-bw)/2)
+
+	for y := 0; y < bh && top+y < len(lines); y++ {
+		ln := lines[top+y]
+		pad := left
+		if short := m.w - lipgloss.Width(ln); short < pad {
+			pad = max(0, short)
+			lines[top+y] = ln + strings.Repeat(" ", pad) + boxLines(box)[y]
+			continue
+		}
+		lines[top+y] = ln + strings.Repeat(" ", pad) + boxLines(box)[y]
+	}
+	return strings.Join(lines, "\n")
+}
+
+func boxLines(box string) []string { return strings.Split(box, "\n") }
+
 func (m *Model) View() tea.View {
 	if m.w == 0 {
 		return tea.NewView("loading…")
@@ -126,6 +180,10 @@ func (m *Model) View() tea.View {
 		lines = append(lines, strings.Repeat(" ", m.w))
 	}
 	body = m.th.Body().Render(strings.Join(lines, "\n"))
+
+	if m.help {
+		body = m.overlay(body)
+	}
 
 	// --- status bar ---
 	status := m.status

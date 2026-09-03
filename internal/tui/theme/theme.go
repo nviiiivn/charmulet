@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 
+	"image/color"
+
 	"charm.land/lipgloss/v2"
 	toml "github.com/pelletier/go-toml/v2"
 )
@@ -75,3 +77,7 @@ func (t Theme) Muted() lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(t.Colors.Muted))
 }
 func (t Theme) Body() lipgloss.Style { return t.base(t.Colors.Foreground, t.Colors.Background) }
+
+// AccentColor exposes the raw accent color for style attributes that take a
+// color.Color (borders, underlines) instead of a full Style.
+func (t Theme) AccentColor() color.Color { return lipgloss.Color(t.Colors.Accent) }

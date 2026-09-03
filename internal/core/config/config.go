@@ -10,7 +10,9 @@ import (
 )
 
 type Config struct {
-	Theme string `toml:"theme"`
+	Theme     string `toml:"theme"`
+	OllamaURL string `toml:"ollama_url"`
+	ChatModel string `toml:"chat_model"`
 
 	DataDir string `toml:"-"`
 }
@@ -44,10 +46,26 @@ func Load() (*Config, error) {
 		if layer.Theme != "" {
 			cfg.Theme = layer.Theme
 		}
+		if layer.OllamaURL != "" {
+			cfg.OllamaURL = layer.OllamaURL
+		}
+		if layer.ChatModel != "" {
+			cfg.ChatModel = layer.ChatModel
+		}
 		cfg.DataDir = filepath.Dir(p)
 	}
 	if cfg.Theme == "" {
 		cfg.Theme = "cartridge"
+	}
+	if cfg.OllamaURL == "" {
+		if v := os.Getenv("CHARMULET_OLLAMA_URL"); v != "" {
+			cfg.OllamaURL = v
+		} else {
+			cfg.OllamaURL = "http://192.0.2.24:11434"
+		}
+	}
+	if cfg.ChatModel == "" {
+		cfg.ChatModel = "qwen3.5:9b"
 	}
 	return cfg, nil
 }

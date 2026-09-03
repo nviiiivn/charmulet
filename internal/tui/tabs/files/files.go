@@ -1,13 +1,17 @@
-// Package files is the file browser/viewer. P0 lists the working directory;
-// the viewer pane and git-status awareness arrive in P2.
+// Package files is the file browser/viewer: j/k navigation, enter to open
+// directories and files, glamour-rendered markdown reading.
 package files
 
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/glamour"
+
 	"github.com/nvii/charmulet/internal/tui/tabs"
 	"github.com/nvii/charmulet/internal/tui/theme"
 )
@@ -23,6 +27,10 @@ type Model struct {
 	cwd     string
 	w, h    int
 	th      theme.Theme
+
+	viewing  bool
+	vp       viewport.Model
+	viewPath string
 }
 
 var _ tabs.Tab = (*Model)(nil)
@@ -37,8 +45,10 @@ func (m *Model) ID() string    { return "files" }
 func (m *Model) Init() tea.Cmd { return nil }
 
 func (m *Model) Activate() tea.Cmd {
-	if err := m.load("."); err != nil {
-		return func() tea.Msg { return errMsg{err} }
+	if m.cwd == "" {
+		if err := m.load("."); err != nil {
+			return func() tea.Msg { return errMsg{err} }
+		}
 	}
 	return nil
 }
@@ -57,29 +67,102 @@ func (m *Model) load(dir string) error {
 		}
 		m.entries = append(m.entries, entry{name: de.Name(), isDir: de.IsDir()})
 	}
-	// directories first, then names
-	for i := range m.entries {
-		for j := i + 1; j < len(m.entries); j++ {
-			a, b := m.entries[i], m.entries[j]
-			if b.isDir && !a.isDir || (a.isDir == b.isDir && a.name > b.name) {
-				m.entries[i], m.entries[j] = m.entries[j], m.entries[i]
-			}
-		}
+	sortEntries(m.entries)
+	abs, err := filepath.Abs(dir)
+	if err == nil {
+		m.cwd = abs
 	}
-	m.cwd, _ = os.Getwd()
+	parent := filepath.Dir(m.cwd)
+	if parent != m.cwd {
+		m.entries = append([]entry{{name: "..", isDir: true}}, m.entries...)
+	}
 	m.cursor = 0
 	return nil
 }
 
+func sortEntries(es []entry) {
+	for i := range es {
+		for j := i + 1; j < len(es); j++ {
+			a, b := es[i], es[j]
+			if b.isDir && !a.isDir || (a.isDir == b.isDir && a.name > b.name) {
+				es[i], es[j] = es[j], es[i]
+			}
+		}
+	}
+}
+
 type errMsg struct{ err error }
 
-func (m *Model) Resize(w, h int) { m.w, m.h = w, h }
+func (m *Model) Resize(w, h int) {
+	m.w, m.h = w, h
+	if m.viewing {
+		m.layoutViewer()
+	}
+}
+
+// layoutViewer sizes the viewport and re-renders content at current width.
+func (m *Model) layoutViewer() {
+	m.vp.SetWidth(m.w)
+	m.vp.SetHeight(m.h - 1)
+	if raw, err := os.ReadFile(m.viewPath); err == nil {
+		m.vp.SetContent(m.render(string(raw)))
+	}
+}
+
+// render pipes content through glamour for markdown, passthrough otherwise.
+func (m *Model) render(raw string) string {
+	if strings.HasSuffix(strings.ToLower(m.viewPath), ".md") || strings.HasSuffix(strings.ToLower(m.viewPath), ".markdown") {
+		w := m.w
+		if w <= 0 {
+			w = 80
+		}
+		r, err := glamour.NewTermRenderer(
+			glamour.WithAutoStyle(),
+			glamour.WithWordWrap(min(w-2, 100)),
+		)
+		if err != nil {
+			return raw
+		}
+		out, err := r.Render(raw)
+		if err != nil {
+			return raw
+		}
+		return out
+	}
+	return raw
+}
+
+func (m *Model) open(path string, isDir bool) tea.Cmd {
+	if isDir {
+		if err := m.load(path); err != nil {
+			return func() tea.Msg { return errMsg{err} }
+		}
+		return nil
+	}
+	m.viewing = true
+	m.viewPath = path
+	m.layoutViewer()
+	return nil
+}
 
 func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 	key, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return m, nil
 	}
+
+	if m.viewing {
+		switch key.String() {
+		case "esc", "q":
+			m.viewing = false
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			m.vp, cmd = m.vp.Update(msg)
+			return m, cmd
+		}
+	}
+
 	switch key.String() {
 	case "up", "k":
 		if m.cursor > 0 {
@@ -89,6 +172,15 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 		if m.cursor < len(m.entries)-1 {
 			m.cursor++
 		}
+	case "enter":
+		e := m.entries[m.cursor]
+		target := e.name
+		if target == ".." {
+			target = filepath.Dir(m.cwd)
+		} else if !filepath.IsAbs(target) {
+			target = filepath.Join(m.cwd, target)
+		}
+		return m, m.open(target, e.isDir)
 	case "r":
 		if err := m.load("."); err != nil {
 			return m, func() tea.Msg { return errMsg{err} }
@@ -98,6 +190,10 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 }
 
 func (m *Model) View() string {
+	if m.viewing {
+		header := m.th.Muted().Render(m.viewPath) + "\n"
+		return header + m.vp.View()
+	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n\n", m.th.Muted().Render(m.cwd))
 	maxRows := m.h - 4
@@ -109,7 +205,7 @@ func (m *Model) View() string {
 			break
 		}
 		label := e.name
-		if e.isDir {
+		if e.isDir && e.name != ".." {
 			label += "/"
 		}
 		switch i {
@@ -123,6 +219,6 @@ func (m *Model) View() string {
 			}
 		}
 	}
-	fmt.Fprintf(&b, "\n%s", m.th.Muted().Render(fmt.Sprintf("%d entries · j/k move · r refresh", len(m.entries))))
+	fmt.Fprintf(&b, "\n%s", m.th.Muted().Render(fmt.Sprintf("%d entries · j/k move · enter open · r refresh · esc back", len(m.entries))))
 	return b.String()
 }
