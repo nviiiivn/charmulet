@@ -38,15 +38,28 @@ type Model struct {
 	cur       provider.Stream
 	buf       strings.Builder
 	pending   string // user text of the in-flight turn
+
+	title string // tab-bar label; "CHAT" for the default session
 }
 
 var _ tabs.Tab = (*Model)(nil)
 
 func New(th theme.Theme, prov provider.Provider, model string) *Model {
+	return newModel(th, prov, model, "CHAT")
+}
+
+// NewSession creates a spawned chat tab with a model-derived title
+// (used by the launcher for parallel sessions).
+func NewSession(th theme.Theme, prov provider.Provider, model string) *Model {
+	return newModel(th, prov, model, sessionTitle(model))
+}
+
+func newModel(th theme.Theme, prov provider.Provider, model, title string) *Model {
 	m := &Model{
 		th:    th,
 		prov:  prov,
 		model: model,
+		title: title,
 	}
 	m.ta = textarea.New()
 	m.ta.Placeholder = "say something… (enter to send, esc to cancel)"
@@ -58,7 +71,24 @@ func New(th theme.Theme, prov provider.Provider, model string) *Model {
 	return m
 }
 
-func (m *Model) Title() string { return "CHAT" }
+// sessionTitle shortens "hf.co/NousResearch/Hermes-4.3-36B-GGUF:q4_K_M"
+// to "HERMES-4.3-36B-G…" style labels for the tab bar.
+func sessionTitle(model string) string {
+	base := model
+	if i := strings.LastIndex(base, "/"); i >= 0 {
+		base = base[i+1:]
+	}
+	if i := strings.Index(base, ":"); i > 0 {
+		base = base[:i]
+	}
+	base = strings.ToUpper(base)
+	if len(base) > 14 {
+		base = base[:13] + "…"
+	}
+	return base
+}
+
+func (m *Model) Title() string { return m.title }
 func (m *Model) ID() string    { return "chat" }
 
 func (m *Model) Init() tea.Cmd { return textarea.Blink }
@@ -138,11 +168,6 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 
 	case streamDoneMsg:
 		text := strings.TrimSpace(m.buf.String())
-		if text != "" {
-			m.log = append(m.log,
-				m.th.Accent().Render(" charm ")+" "+text, "",
-			)
-		}
 		if text != "" {
 			m.log = append(m.log,
 				m.th.Accent().Render(" charm ")+" "+text, "",

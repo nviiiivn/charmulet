@@ -21,6 +21,7 @@ const (
 
 type Model struct {
 	tabs   []tabs.Tab
+	core   map[string]bool // tab IDs that cannot be closed (ctrl+w)
 	active int
 	w, h   int
 	th     theme.Theme
@@ -31,10 +32,40 @@ type Model struct {
 var _ tea.Model = (*Model)(nil)
 
 func New(th theme.Theme, ts ...tabs.Tab) *Model {
-	return &Model{tabs: ts, th: th}
+	core := make(map[string]bool, len(ts))
+	for _, t := range ts {
+		core[t.ID()] = true
+	}
+	return &Model{tabs: ts, core: core, th: th}
 }
 
 func (m *Model) Active() tabs.Tab { return m.tabs[m.active] }
+
+// spawn appends a tab, focuses it, and returns the cmds to run.
+func (m *Model) spawn(t tabs.Tab) tea.Cmd {
+	m.Active().Deactivate()
+	m.tabs = append(m.tabs, t)
+	t.Resize(m.w, bodyHeight(m))
+	m.active = len(m.tabs) - 1
+	return tea.Batch(t.Init(), t.Activate())
+}
+
+// close removes the active tab unless it is core. Returns focus cmd.
+func (m *Model) close() {
+	if m.core[m.Active().ID()] {
+		m.status = "core tabs can't be closed"
+		return
+	}
+	m.Active().Deactivate()
+	m.tabs = append(m.tabs[:m.active], m.tabs[m.active+1:]...)
+	if m.active >= len(m.tabs) {
+		m.active = len(m.tabs) - 1
+	}
+	if m.active < 0 {
+		m.active = 0
+	}
+	m.status = ""
+}
 
 func bodyHeight(m *Model) int {
 	h := m.h - tabBarHeight - statusHeight
@@ -81,6 +112,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Active().Deactivate()
 			m.active = (m.active - 1 + len(m.tabs)) % len(m.tabs)
 			return m, m.Active().Activate()
+		case "ctrl+w":
+			m.close()
+			return m, m.Active().Activate()
 		default:
 			// number keys 1-9 jump straight to a tab
 			if len(msg.String()) == 1 && msg.String()[0] >= '1' && msg.String()[0] <= '9' {
@@ -93,6 +127,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+
+	case tabs.SpawnMsg:
+		return m, m.spawn(msg.Tab)
 
 	case errMsg:
 		m.status = "error: " + msg.err.Error()
@@ -114,10 +151,14 @@ func (m *Model) overlay(body string) string {
 	rows := []string{
 		m.th.TabActive().Render(" CHARMULET "),
 		"",
-		m.th.Accent().Render("tabs") + "   tab / shift+tab cycle · 1-9 jump",
-		m.th.Accent().Render("chat") + "   enter send · esc cancel stream",
-		m.th.Accent().Render("files") + "  j/k move · enter open · r refresh",
-		m.th.Accent().Render("viewer") + " esc/q close file",
+		m.th.Accent().Render("tabs") + "     tab / shift+tab cycle · 1-9 jump · ctrl+w close spawned",
+		m.th.Accent().Render("chat") + "     enter send · esc cancel stream",
+		m.th.Accent().Render("launch") + "   pick model → spawns a parallel chat session",
+		m.th.Accent().Render("runs") + "     fan-out prompt to many models",
+		m.th.Accent().Render("files") + "    j/k move · enter open · r refresh",
+		m.th.Accent().Render("viewer") + "  esc/q close file",
+		m.th.Accent().Render("services") + " homelab cards · r refresh · j/k select",
+		m.th.Accent().Render("fronts") + "  url checks · r refresh · j/k select",
 		"",
 		m.th.Muted().Render("? close this screen · ctrl+c quit"),
 	}
@@ -188,7 +229,7 @@ func (m *Model) View() tea.View {
 	// --- status bar ---
 	status := m.status
 	if status == "" {
-		status = fmt.Sprintf("charmulet P0 · theme:%s · %s", m.th.Name, m.Active().ID())
+		status = fmt.Sprintf("charmulet P2 · theme:%s · %s", m.th.Name, m.Active().ID())
 	}
 	sb := m.th.StatusBar().Render(status)
 	if pad := m.w - lipgloss.Width(sb); pad > 0 {

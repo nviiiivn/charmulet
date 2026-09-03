@@ -19,3 +19,7 @@ type Tab interface {
 	Deactivate()
 	Resize(w, h int)
 }
+
+// SpawnMsg asks the shell to append a new tab and focus it. Any tab can
+// emit it (e.g. the launcher spawning a chat session).
+type SpawnMsg struct{ Tab Tab }
