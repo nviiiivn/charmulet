@@ -91,3 +91,21 @@ func TestNilStoreNoOps(t *testing.T) {
 		t.Fatalf("nil messages: %v %v", m, err)
 	}
 }
+
+func TestRename(t *testing.T) {
+	st := open(t)
+	meta, err := st.Create("OLD", "m")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := st.Rename(meta.ID, "NEW"); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	metas, _ := st.List()
+	if metas[0].Title != "NEW" {
+		t.Fatalf("rename not persisted: %q", metas[0].Title)
+	}
+	if err := st.Rename(meta.ID, "  "); err == nil {
+		t.Fatal("empty rename must error")
+	}
+}

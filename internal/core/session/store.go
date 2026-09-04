@@ -4,9 +4,11 @@ package session
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -148,6 +150,18 @@ func (s *Store) Append(sid int64, role, content string) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// Rename updates a session's title.
+func (s *Store) Rename(sid int64, title string) error {
+	if s == nil || s.db == nil || sid == 0 {
+		return nil
+	}
+	if strings.TrimSpace(title) == "" {
+		return errors.New("empty title")
+	}
+	_, err := s.db.Exec(`UPDATE sessions SET title = ? WHERE id = ?`, title, sid, title)
+	return err
 }
 
 // List returns sessions newest-first with message counts.

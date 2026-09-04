@@ -4,6 +4,9 @@ package chat
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -86,6 +89,9 @@ type Model struct {
 	flushing  bool   // a flush tick is armed; skip repaints until it lands
 
 	title string // tab-bar label; "CHAT" for the default session
+
+	renaming  bool // 'i' mode: typing edits the title, enter commits
+	renameBuf string
 
 	st  *session.Store // nil = ephemeral, nothing persisted
 	sid int64          // 0 = not backed by a store row
@@ -181,6 +187,10 @@ func (m *Model) Deactivate()       {}
 
 // Esc cancels an in-flight generation; consumed only while streaming.
 func (m *Model) Esc() bool {
+	if m.renaming {
+		m.renaming = false
+		return true
+	}
 	if m.streaming && m.cancel != nil {
 		m.cancel()
 		return true
@@ -196,7 +206,7 @@ func (m *Model) Resize(w, h int) {
 	m.w, m.h = w, h
 	inputH := 3
 	m.vp.SetWidth(w)
-	m.vp.SetHeight(h - inputH - 2)
+	m.vp.SetHeight(h - inputH - 3)
 	m.ta.SetWidth(w)
 	m.ta.SetHeight(inputH)
 }
@@ -223,6 +233,49 @@ func (m *Model) appendCmd(role, content string) tea.Cmd {
 		_ = st.Append(sid, role, content)
 		return nil
 	}
+}
+
+// exportedMsg flashes the export result.
+type exportedMsg struct {
+	id   string
+	path string
+	err  error
+}
+
+func (m exportedMsg) TabID() string { return m.id }
+
+// exportCmd writes the transcript (hist) to a markdown file off-loop.
+func (m *Model) exportCmd() tea.Cmd {
+	id := m.id
+	title, hist := m.title, append([]provider.Message(nil), m.hist...)
+	return func() tea.Msg {
+		path, err := exportMarkdown(title, hist)
+		return exportedMsg{id: id, path: path, err: err}
+	}
+}
+
+// updateRename handles keys while the title editor is open.
+func (m *Model) updateRename(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.String() {
+	case "enter":
+		if t := strings.TrimSpace(m.renameBuf); t != "" {
+			m.title = t
+			if m.st != nil {
+				st, sid := m.st, m.sid
+				_ = st.Rename(sid, t)
+			}
+		}
+		m.renaming = false
+	case "backspace":
+		if r := []rune(m.renameBuf); len(r) > 0 {
+			m.renameBuf = string(r[:len(r)-1])
+		}
+	default:
+		if msg.Mod == 0 && msg.Text != "" {
+			m.renameBuf += msg.Text
+		}
+	}
+	return nil
 }
 
 func (m *Model) start(userText string) tea.Cmd {
@@ -258,6 +311,9 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
+		if m.renaming {
+			return m, m.updateRename(msg)
+		}
 		switch msg.String() {
 		case "enter":
 			val := strings.TrimSpace(m.ta.Value())
@@ -269,6 +325,13 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 				cmds = append(cmds, m.start(val))
 				dirty = true
 			}
+		case "i":
+			if !m.streaming {
+				m.renaming = true
+				m.renameBuf = m.title
+			}
+		case "e":
+			cmds = append(cmds, m.exportCmd())
 		}
 		// Plain typing only moves the textarea cursor — View() renders
 		// it live, so no transcript repaint needed (perf: O(transcript)
@@ -327,6 +390,17 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 		m.log = append(m.log, m.th.TabActive().Render(" err ")+msg.err.Error(), "")
 		m.streaming = false
 		dirty = true
+
+	case exportedMsg:
+		if msg.id != m.id {
+			return m, nil
+		}
+		if msg.err != nil {
+			m.log = append(m.log, m.th.TabActive().Render(" err ")+"export: "+msg.err.Error(), "")
+		} else {
+			m.log = append(m.log, m.th.Secondary().Render(" saved ")+"→ "+msg.path, "")
+		}
+		dirty = true
 	}
 
 	var cmd tea.Cmd
@@ -358,6 +432,55 @@ func (m *Model) renderLog() []string {
 
 func fmtErr(err error) string { return "⚠ " + err.Error() }
 
+// exportMarkdown writes the transcript to
+// ~/.local/share/charmulet/exports/<title>-<timestamp>.md and returns the
+// path written.
+func exportMarkdown(title string, hist []provider.Message) (string, error) {
+	dir := os.Getenv("CHARMULET_EXPORT_DIR")
+	if dir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		dir = filepath.Join(home, ".local", "share", "charmulet", "exports")
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	name := sanitize(title) + "-" + time.Now().Format("20060102-150405") + ".md"
+	path := filepath.Join(dir, name)
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s\n\n", title)
+	for _, msg := range hist {
+		switch msg.Role {
+		case "user":
+			fmt.Fprintf(&b, "## you\n\n%s\n\n", msg.Content)
+		case "assistant":
+			fmt.Fprintf(&b, "## charm\n\n%s\n\n", msg.Content)
+		}
+	}
+	return path, os.WriteFile(path, []byte(b.String()), 0o644)
+}
+
+// sanitize strips path-unsafe runes from a filename seed.
+func sanitize(s string) string {
+	s = strings.Map(func(r rune) rune {
+		switch r {
+		case '/', '\\', ':', '*', '?', '"', '<', '>', '|', ' ':
+			return '-'
+		}
+		return r
+	}, s)
+	if s == "" {
+		s = "session"
+	}
+	if len(s) > 40 {
+		s = s[:40]
+	}
+	return s
+}
+
 func (m *Model) View() string {
 	input := m.ta.View()
 	if pad := m.w - lipgloss.Width(input); pad > 0 {
@@ -366,5 +489,17 @@ func (m *Model) View() string {
 		lines[last] += strings.Repeat(" ", pad)
 		input = strings.Join(lines, "\n")
 	}
-	return m.vp.View() + "\n" + input
+	if m.renaming {
+		bar := m.th.Accent().Render(" title: ") + m.renameBuf + "▮" +
+			m.th.Muted().Render("  enter save · esc cancel")
+		if pad := m.w - lipgloss.Width(bar); pad > 0 {
+			bar += strings.Repeat(" ", pad)
+		}
+		return m.vp.View() + "\n" + bar + "\n" + input
+	}
+	hint := m.th.Muted().Render(" enter send · esc cancel · i rename · e export")
+	if pad := m.w - lipgloss.Width(hint); pad > 0 {
+		hint += strings.Repeat(" ", pad)
+	}
+	return m.vp.View() + "\n" + input + "\n" + hint
 }

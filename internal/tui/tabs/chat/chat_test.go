@@ -1,9 +1,13 @@
 package chat
 
 import (
+	"os"
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/nvii/charmulet/internal/core/provider"
 	"github.com/nvii/charmulet/internal/tui/tabs"
 	"github.com/nvii/charmulet/internal/tui/theme"
 )
@@ -48,5 +52,88 @@ func TestTokenBatchesUntilFlush(t *testing.T) {
 	_, _ = m.Update(tokenMsg{id: "other", text: "x"})
 	if strings.Contains(m.buf.String(), "x") {
 		t.Fatal("foreign token leaked into buffer")
+	}
+}
+
+// TestRenameFlow drives the 'i' title editor: enter mode, type, commit,
+// and esc-cancel restoring nothing.
+func TestRenameFlow(t *testing.T) {
+	m := New(theme.Default(), nil, "test")
+	m.Resize(80, 24)
+
+	if _, _ = m.Update(tea.KeyPressMsg{Code: 'i'}); !m.renaming {
+		t.Fatal("i must open the title editor")
+	}
+	if _, _ = m.Update(tea.KeyPressMsg{Code: 'x', Text: "x"}); m.renameBuf != "CHATx" {
+		t.Fatalf("typed rune must append: %q", m.renameBuf)
+	}
+	if _, _ = m.Update(tea.KeyPressMsg{Code: 'z', Text: "z"}); m.renameBuf != "CHATxz" {
+		t.Fatalf("buffer = %q", m.renameBuf)
+	}
+	if _, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace}); m.renameBuf != "CHATx" {
+		t.Fatalf("backspace must trim: %q", m.renameBuf)
+	}
+	if _, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter}); m.renaming {
+		t.Fatal("enter must commit the rename")
+	}
+	if m.Title() != "CHATx" {
+		t.Fatalf("title = %q", m.Title())
+	}
+
+	// esc cancels a rename without touching the title
+	m.Update(tea.KeyPressMsg{Code: 'i'})
+	m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	if !m.Esc() || m.renaming {
+		t.Fatal("esc must close the editor")
+	}
+	if m.Title() != "CHATx" {
+		t.Fatalf("canceled rename leaked: %q", m.Title())
+	}
+}
+
+// TestExportWritesMarkdown pins the 'e' export path: file exists, holds the
+// transcript turns.
+func TestExportWritesMarkdown(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CHARMULET_EXPORT_DIR", dir)
+
+	m := New(theme.Default(), nil, "test")
+	m.hist = append(m.hist,
+		provider.Message{Role: "user", Content: "hello there"},
+		provider.Message{Role: "assistant", Content: "general kenobi"},
+	)
+
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'e'})
+	if cmd == nil {
+		t.Fatal("e must arm the export cmd")
+	}
+	msg := cmd()
+	em, ok := msg.(exportedMsg)
+	if !ok {
+		t.Fatalf("export cmd yielded %T", msg)
+	}
+	if em.err != nil {
+		t.Fatalf("export: %v", em.err)
+	}
+	b, err := os.ReadFile(em.path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	s := string(b)
+	if !strings.Contains(s, "## you") || !strings.Contains(s, "hello there") ||
+		!strings.Contains(s, "## charm") || !strings.Contains(s, "general kenobi") {
+		t.Fatalf("transcript missing from export:\n%s", s)
+	}
+
+	// flash lands in the log once the msg round-trips
+	m.Update(em)
+	found := false
+	for _, l := range m.renderLog() {
+		if strings.Contains(l, em.path) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("export flash missing from transcript")
 	}
 }
