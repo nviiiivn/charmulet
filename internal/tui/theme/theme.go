@@ -5,6 +5,7 @@ package theme
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"image/color"
 
@@ -85,3 +86,30 @@ func (t Theme) Body() lipgloss.Style { return t.base(t.Colors.Foreground, t.Colo
 // AccentColor exposes the raw accent color for style attributes that take a
 // color.Color (borders, underlines) instead of a full Style.
 func (t Theme) AccentColor() color.Color { return lipgloss.Color(t.Colors.Accent) }
+
+// SecondaryColor / TertiaryColor / MutedColor expose raw colors for
+// per-letter gradient effects (splash logo) and borders.
+func (t Theme) SecondaryColor() color.Color { return lipgloss.Color(t.Colors.Secondary) }
+func (t Theme) TertiaryColor() color.Color  { return lipgloss.Color(t.Colors.Tertiary) }
+func (t Theme) MutedColor() color.Color     { return lipgloss.Color(t.Colors.Muted) }
+
+// Available enumerates themes from a directory's *.toml files, always
+// starting with the built-in default. Missing dir = default only.
+func Available(dir string) []Theme {
+	out := []Theme{Default()}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return out
+	}
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".toml" {
+			continue
+		}
+		th, err := Load(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		out = append(out, th)
+	}
+	return out
+}

@@ -25,6 +25,7 @@ import (
 	"github.com/nvii/charmulet/internal/tui/tabs/runs"
 	servicestabs "github.com/nvii/charmulet/internal/tui/tabs/services"
 	sessionstabs "github.com/nvii/charmulet/internal/tui/tabs/sessions"
+	settingstabs "github.com/nvii/charmulet/internal/tui/tabs/settings"
 	"github.com/nvii/charmulet/internal/tui/theme"
 )
 
@@ -83,7 +84,7 @@ func resumeTab(st *session.Store, th theme.Theme, prov provider.Provider, q stri
 	return chat.NewResume(th, prov, st, *meta, msgs)
 }
 
-func runTUI(themeName, resumeQuery string) error {
+func runTUI(themeName, resumeQuery, version string) error {
 	th := loadTheme(themeName)
 	cfg, err := config.Load()
 	if err != nil {
@@ -110,6 +111,7 @@ func runTUI(themeName, resumeQuery string) error {
 		launchtabs.New(th, prov, st),
 		sessionstabs.New(th, prov, st),
 		agents.New(th),
+		settingstabs.New(th, cfg, "themes", version),
 	)
 
 	p := tea.NewProgram(shell.New(th, initial...))
@@ -117,15 +119,17 @@ func runTUI(themeName, resumeQuery string) error {
 	return err
 }
 
+const appVersion = "0.1.0-p4"
+
 func main() {
 	var themeName, resumeQuery string
 
 	root := &cobra.Command{
 		Use:     "charmulet",
 		Short:   "The charmulet agentic development environment",
-		Version: "0.1.0-p3",
+		Version: appVersion,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTUI(themeName, resumeQuery)
+			return runTUI(themeName, resumeQuery, appVersion)
 		},
 	}
 
@@ -134,7 +138,7 @@ func main() {
 		Use:   "run",
 		Short: "Launch the CHARMULET TUI (same as bare charmulet)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTUI(themeName, resumeQuery)
+			return runTUI(themeName, resumeQuery, appVersion)
 		},
 	}
 
@@ -144,7 +148,7 @@ func main() {
 
 	root.AddCommand(run)
 	ctx := context.Background()
-	if err := fang.Execute(ctx, root, fang.WithVersion(root.Version)); err != nil {
+	if err := fang.Execute(ctx, root, fang.WithVersion(appVersion)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

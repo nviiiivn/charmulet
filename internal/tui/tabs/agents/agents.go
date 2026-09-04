@@ -151,6 +151,10 @@ func (m *Model) saveForm() {
 
 func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tabs.SetThemeMsg:
+		m.th = msg.Theme
+		return m, nil
+
 	case tea.KeyPressMsg:
 		switch m.mode {
 		case modeList:

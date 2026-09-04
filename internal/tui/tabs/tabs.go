@@ -5,6 +5,8 @@ package tabs
 
 import tea "charm.land/bubbletea/v2"
 
+import "github.com/nvii/charmulet/internal/tui/theme"
+
 type Tab interface {
 	// Title returns the label shown in the tab bar.
 	Title() string
@@ -23,3 +25,7 @@ type Tab interface {
 // SpawnMsg asks the shell to append a new tab and focus it. Any tab can
 // emit it (e.g. the launcher spawning a chat session).
 type SpawnMsg struct{ Tab Tab }
+
+// SetThemeMsg re-styles every tab live (zero restart). The shell fans it
+// out to all tabs after updating its own chrome.
+type SetThemeMsg struct{ Theme theme.Theme }

@@ -69,6 +69,10 @@ func (m *Model) resumeCmd(meta session.SessionMeta) tea.Cmd {
 
 func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tabs.SetThemeMsg:
+		m.th = msg.Theme
+		return m, nil
+
 	case listedMsg:
 		m.loaded = true
 		m.err = ""

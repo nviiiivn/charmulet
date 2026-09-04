@@ -73,6 +73,10 @@ func tick() tea.Cmd {
 
 func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tabs.SetThemeMsg:
+		m.th = msg.Theme
+		return m, nil
+
 	case tickMsg:
 		return m, fetchCmd(m.url)
 	case fetchedMsg:

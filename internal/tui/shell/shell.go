@@ -5,7 +5,9 @@ package shell
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -27,6 +29,7 @@ type Model struct {
 	th     theme.Theme
 	status string // transient message line (errors etc.)
 	help   bool   // help overlay screen
+	splash bool   // intro splash screen (dismiss: any key or timer)
 }
 
 var _ tea.Model = (*Model)(nil)
@@ -36,7 +39,13 @@ func New(th theme.Theme, ts ...tabs.Tab) *Model {
 	for _, t := range ts {
 		core[t.ID()] = true
 	}
-	return &Model{tabs: ts, core: core, th: th}
+	return &Model{tabs: ts, core: core, th: th, splash: true}
+}
+
+type splashTickMsg struct{}
+
+func splashCmd() tea.Cmd {
+	return tea.Tick(1600*time.Millisecond, func(time.Time) tea.Msg { return splashTickMsg{} })
 }
 
 func (m *Model) Active() tabs.Tab { return m.tabs[m.active] }
@@ -75,7 +84,9 @@ func bodyHeight(m *Model) int {
 	return h
 }
 
-func (m *Model) Init() tea.Cmd { return m.Active().Activate() }
+func (m *Model) Init() tea.Cmd {
+	return tea.Batch(m.Active().Activate(), splashCmd())
+}
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -87,6 +98,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
+		if m.splash {
+			m.splash = false
+			return m, nil // swallow the dismissing key
+		}
 		switch msg.String() {
 		case "ctrl+c":
 			return m, tea.Quit
@@ -128,8 +143,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+	case splashTickMsg:
+		m.splash = false
+		return m, nil
+
 	case tabs.SpawnMsg:
 		return m, m.spawn(msg.Tab)
+
+	case tabs.SetThemeMsg:
+		m.th = msg.Theme
+		for i, t := range m.tabs {
+			nt, _ := t.Update(msg)
+			m.tabs[i] = nt
+		}
+		return m, nil
 
 	case errMsg:
 		m.status = "error: " + msg.err.Error()
@@ -156,6 +183,7 @@ func (m *Model) overlay(body string) string {
 		m.th.Accent().Render("launch") + "   pick model → spawns a parallel chat session",
 		m.th.Accent().Render("sessions") + " resume past conversations · enter reopen",
 		m.th.Accent().Render("agents") + "   edit agent TOML · skills on/off · n new",
+		m.th.Accent().Render("settings") + " live theme switch · enter apply + save",
 		m.th.Accent().Render("runs") + "     fan-out prompt to many models",
 		m.th.Accent().Render("files") + "    j/k move · enter open · r refresh",
 		m.th.Accent().Render("viewer") + "  esc/q close file",
@@ -191,9 +219,49 @@ func (m *Model) overlay(body string) string {
 
 func boxLines(box string) []string { return strings.Split(box, "\n") }
 
+// splashView renders the intro: the word charmulet in cycling pride colors.
+func (m *Model) splashView() string {
+	cols := []color.Color{m.th.AccentColor(), m.th.SecondaryColor(), m.th.TertiaryColor()}
+	var word strings.Builder
+	for i, r := range "charmulet" {
+		word.WriteString(lipgloss.NewStyle().Bold(true).Foreground(cols[i%len(cols)]).Render(string(r)))
+	}
+
+	rows := []string{
+		m.th.Muted().Render("✦ ✧ ✦"),
+		"",
+		word.String(),
+		m.th.Secondary().Render("the agentic development environment"),
+		"",
+		m.th.Muted().Render("press any key"),
+	}
+	box := strings.Join(rows, "\n")
+
+	top := max(0, (m.h-lipgloss.Height(box))/2)
+	left := max(0, (m.w-lipgloss.Width(box))/2)
+
+	var lines []string
+	for i := 0; i < top; i++ {
+		lines = append(lines, "")
+	}
+	for _, r := range strings.Split(box, "\n") {
+		lines = append(lines, strings.Repeat(" ", left)+r)
+	}
+	for len(lines) < m.h {
+		lines = append(lines, "")
+	}
+	return m.th.Body().Render(strings.Join(lines, "\n"))
+}
+
 func (m *Model) View() tea.View {
 	if m.w == 0 {
 		return tea.NewView("loading…")
+	}
+
+	if m.splash {
+		v := tea.NewView(m.splashView())
+		v.AltScreen = true
+		return v
 	}
 
 	// --- tab bar ---
@@ -231,7 +299,7 @@ func (m *Model) View() tea.View {
 	// --- status bar ---
 	status := m.status
 	if status == "" {
-		status = fmt.Sprintf("charmulet P2 · theme:%s · %s", m.th.Name, m.Active().ID())
+		status = fmt.Sprintf("charmulet P4 · theme:%s · %s", m.th.Name, m.Active().ID())
 	}
 	sb := m.th.StatusBar().Render(status)
 	if pad := m.w - lipgloss.Width(sb); pad > 0 {

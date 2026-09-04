@@ -146,6 +146,11 @@ func (m *Model) open(path string, isDir bool) tea.Cmd {
 }
 
 func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
+	if tm, ok := msg.(tabs.SetThemeMsg); ok {
+		m.th = tm.Theme
+		return m, nil
+	}
+
 	key, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return m, nil

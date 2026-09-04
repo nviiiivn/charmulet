@@ -19,6 +19,12 @@ type Config struct {
 
 // Paths returns config locations in precedence order (later wins).
 func Paths() []string {
+	if root := os.Getenv("CHARMULET_CONFIG_DIR"); root != "" {
+		return []string{
+			filepath.Join(root, "charmulet.toml"),
+			".charmulet.toml",
+		}
+	}
 	if home, err := os.UserHomeDir(); err == nil {
 		return []string{
 			filepath.Join(home, ".config", "charmulet", "charmulet.toml"),
@@ -26,6 +32,28 @@ func Paths() []string {
 		}
 	}
 	return []string{".charmulet.toml"}
+}
+
+// Save persists the user-level config layer (creating the dir on demand).
+func Save(cfg *Config) error {
+	var p string
+	if root := os.Getenv("CHARMULET_CONFIG_DIR"); root != "" {
+		p = filepath.Join(root, "charmulet.toml")
+	} else {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		p = filepath.Join(home, ".config", "charmulet", "charmulet.toml")
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return err
+	}
+	b, err := toml.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(p, b, 0o644)
 }
 
 // Load merges every existing layer in order.
