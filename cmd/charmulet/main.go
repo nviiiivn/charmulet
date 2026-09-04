@@ -18,6 +18,7 @@ import (
 	"github.com/nvii/charmulet/internal/tui/shell"
 	"github.com/nvii/charmulet/internal/tui/tabs"
 	"github.com/nvii/charmulet/internal/tui/tabs/agents"
+	changestabs "github.com/nvii/charmulet/internal/tui/tabs/changes"
 	"github.com/nvii/charmulet/internal/tui/tabs/chat"
 	filestabs "github.com/nvii/charmulet/internal/tui/tabs/files"
 	frontstabs "github.com/nvii/charmulet/internal/tui/tabs/fronts"
@@ -141,6 +142,7 @@ func runTUI(themeName, resumeQuery, version string) error {
 		agents.New(th),
 		settingstabs.New(th, cfg, "themes", version),
 		pagestabs.New(th, dashURL()),
+		changestabs.New(th, "."),
 	)
 
 	p := tea.NewProgram(shell.New(th, initial...))

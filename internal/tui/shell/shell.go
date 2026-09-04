@@ -220,6 +220,7 @@ func (m *Model) overlay(body string) string {
 		m.th.Accent().Render("agents") + "   edit agent TOML · skills on/off · n new",
 		m.th.Accent().Render("settings") + " live theme switch · enter apply + save",
 		m.th.Accent().Render("pages") + "    custom TOML dashboards · h/l switch",
+		m.th.Accent().Render("changes") + "  git walkthrough · enter diff · esc back",
 		m.th.Accent().Render("runs") + "     fan-out prompt to many models",
 		m.th.Accent().Render("files") + "    j/k move · enter open · r refresh",
 		m.th.Accent().Render("viewer") + "  esc/q close file",
