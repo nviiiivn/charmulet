@@ -4,15 +4,13 @@
 package agents
 
 import (
-	"os"
-	"strings"
-
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
-
 	coreagents "github.com/nvii/charmulet/internal/core/agents"
 	"github.com/nvii/charmulet/internal/tui/tabs"
 	"github.com/nvii/charmulet/internal/tui/theme"
+	"os"
+	"strings"
 )
 
 type mode int
@@ -30,28 +28,21 @@ type field struct {
 	multiline bool
 	value     string
 }
-
 type Model struct {
-	th   theme.Theme
-	w, h int
-
-	mode mode
-	pane int // 0 agents · 1 skills
-
-	agents     []coreagents.Agent
-	skills     []coreagents.Skill
-	selA, selS int
-
-	form     []field
-	selF     int
-	origName string // agent file being edited ("" = new)
-
+	th           theme.Theme
+	w, h         int
+	mode         mode
+	pane         int // 0 agents · 1 skills
+	agents       []coreagents.Agent
+	skills       []coreagents.Skill
+	selA, selS   int
+	form         []field
+	selF         int
+	origName     string // agent file being edited ("" = new)
 	newSkillName string
-
-	skillIdx int // skill being body-edited
-
-	ta     textarea.Model
-	status string
+	skillIdx     int // skill being body-edited
+	ta           textarea.Model
+	status       string
 }
 
 var _ tabs.Tab = (*Model)(nil)
@@ -63,7 +54,6 @@ func New(th theme.Theme) *Model {
 	m.reload()
 	return m
 }
-
 func (m *Model) reload() {
 	if a, err := coreagents.List(); err == nil {
 		m.agents = a
@@ -88,7 +78,6 @@ func (m *Model) reload() {
 		m.selS = 0
 	}
 }
-
 func (m *Model) Title() string { return "AGENTS" }
 func (m *Model) ID() string    { return "agents" }
 func (m *Model) Init() tea.Cmd { return nil }
@@ -97,14 +86,12 @@ func (m *Model) Activate() tea.Cmd {
 	return nil
 }
 func (m *Model) Deactivate() {}
-
 func (m *Model) Resize(w, h int) {
 	m.w, m.h = w, h
 	ew := min(w-6, 90)
 	m.ta.SetWidth(ew)
 	m.ta.SetHeight(min(h-8, 18))
 }
-
 func (m *Model) openForm(a coreagents.Agent, isNew bool) {
 	m.mode = modeForm
 	m.selF = 0
@@ -120,7 +107,6 @@ func (m *Model) openForm(a coreagents.Agent, isNew bool) {
 		{label: "wrapper", value: a.Wrapper},
 	}
 }
-
 func (m *Model) saveForm() {
 	name := strings.TrimSpace(m.form[0].value)
 	if name == "" {
@@ -148,13 +134,11 @@ func (m *Model) saveForm() {
 	m.mode = modeList
 	m.reload()
 }
-
 func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tabs.SetThemeMsg:
 		m.th = msg.Theme
 		return m, nil
-
 	case tea.KeyPressMsg:
 		switch m.mode {
 		case modeList:
@@ -169,101 +153,114 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 	}
 	return m, nil
 }
-
 func (m *Model) updateList(msg tea.KeyPressMsg) (tabs.Tab, tea.Cmd) {
 	switch msg.String() {
 	case "h", "left":
-		if m.pane > 0 {
-			m.pane = 0
-		}
+		m.pane = 0
 	case "l", "right":
-		if m.pane < 1 {
-			m.pane = 1
-		}
-	case "j", "down":
-		if m.pane == 0 && m.selA < len(m.agents)-1 {
-			m.selA++
-		}
-		if m.pane == 1 && m.selS < len(m.skills)-1 {
-			m.selS++
-		}
-	case "k", "up":
-		if m.pane == 0 && m.selA > 0 {
-			m.selA--
-		}
-		if m.pane == 1 && m.selS > 0 {
-			m.selS--
-		}
+		m.pane = 1
 	case "r", "R":
 		m.reload()
 		m.status = "refreshed"
 	case "n", "N":
-		if m.pane == 0 {
-			m.openForm(coreagents.Agent{Model: "qwen3.5:9b"}, true)
-		} else {
-			m.mode, m.newSkillName = modeSkillName, ""
-		}
+		m.newItem()
 	case " ":
-		if m.pane == 1 && len(m.skills) > 0 {
-			s := m.skills[m.selS]
-			ns, err := coreagents.ToggleSkill(s)
-			if err != nil {
-				m.status = err.Error()
-			} else {
-				m.skills[m.selS] = ns
-				verb := "disabled"
-				if ns.Enabled {
-					verb = "enabled"
-				}
-				m.status = verb + " " + ns.Name
-			}
-		}
+		m.toggleSkill()
 	case "enter":
+		m.openSelection()
+	default:
 		if m.pane == 0 {
-			if len(m.agents) > 0 {
-				m.openForm(m.agents[m.selA], false)
+			if n, ok := tabs.MoveSel(m.selA, len(m.agents), msg); ok {
+				m.selA = n
 			}
-		} else if len(m.skills) > 0 {
-			m.skillIdx = m.selS
-			m.openOverlay(m.skills[m.selS].Name, m.readSkillBody(m.skills[m.selS]), modeSkillBody)
+		} else if n, ok := tabs.MoveSel(m.selS, len(m.skills), msg); ok {
+			m.selS = n
 		}
 	}
 	return m, nil
 }
 
+// newItem starts an agent form (agents pane) or skill-name entry (skills).
+func (m *Model) newItem() {
+	if m.pane == 0 {
+		m.openForm(coreagents.Agent{Model: "qwen3.5:9b"}, true)
+	} else {
+		m.mode, m.newSkillName = modeSkillName, ""
+	}
+}
+
+// toggleSkill flips the selected skill's enabled state.
+func (m *Model) toggleSkill() {
+	if m.pane != 1 || len(m.skills) == 0 {
+		return
+	}
+	s := m.skills[m.selS]
+	ns, err := coreagents.ToggleSkill(s)
+	if err != nil {
+		m.status = err.Error()
+		return
+	}
+	m.skills[m.selS] = ns
+	verb := "disabled"
+	if ns.Enabled {
+		verb = "enabled"
+	}
+	m.status = verb + " " + ns.Name
+}
+
+// openSelection edits the selected agent or skill body.
+func (m *Model) openSelection() {
+	if m.pane == 0 {
+		if len(m.agents) > 0 {
+			m.openForm(m.agents[m.selA], false)
+		}
+		return
+	}
+	if len(m.skills) > 0 {
+		m.skillIdx = m.selS
+		m.openOverlay(m.skills[m.selS].Name, m.readSkillBody(m.skills[m.selS]), modeSkillBody)
+	}
+}
 func (m *Model) readSkillBody(s coreagents.Skill) string {
 	return readFile(s.Path)
 }
-
 func (m *Model) updateForm(msg tea.KeyPressMsg) (tabs.Tab, tea.Cmd) {
+	if n, ok := tabs.MoveSel(m.selF, len(m.form), msg); ok {
+		m.selF = n
+	}
 	switch msg.String() {
-	case "j", "down":
-		if m.selF < len(m.form)-1 {
-			m.selF++
-		}
-	case "k", "up":
-		if m.selF > 0 {
-			m.selF--
-		}
 	case "enter":
 		f := m.form[m.selF]
 		m.openOverlay(f.label, f.value, modeField)
 	case "ctrl+s", "s":
 		m.saveForm()
-	case "esc":
-		m.mode = modeList
-		m.status = "discarded"
 	}
 	return m, nil
 }
 
+// Esc backs out of the form, commits open overlays, or cancels skill-name
+// entry; at the top list it declines so the shell can quit.
+func (m *Model) Esc() bool {
+	switch m.mode {
+	case modeForm:
+		m.mode = modeList
+		m.status = "discarded"
+		return true
+	case modeField, modeSkillBody:
+		m.updateOverlay(tea.KeyPressMsg{Code: tea.KeyEscape})
+		return true
+	case modeSkillName:
+		m.mode = modeList
+		return true
+	}
+	return false
+}
 func (m *Model) openOverlay(title, body string, md mode) {
 	m.mode = md
 	m.ta.Reset()
 	m.ta.SetValue(body)
 	m.status = "editing " + title + " · esc to commit"
 }
-
 func (m *Model) updateOverlay(msg tea.KeyPressMsg) (tabs.Tab, tea.Cmd) {
 	if msg.String() == "esc" {
 		body := m.ta.Value()
@@ -287,7 +284,6 @@ func (m *Model) updateOverlay(msg tea.KeyPressMsg) (tabs.Tab, tea.Cmd) {
 	m.ta, cmd = m.ta.Update(msg)
 	return m, cmd
 }
-
 func (m *Model) updateSkillName(msg tea.KeyPressMsg) (tabs.Tab, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
@@ -313,8 +309,6 @@ func (m *Model) updateSkillName(msg tea.KeyPressMsg) (tabs.Tab, tea.Cmd) {
 		if n := len(m.newSkillName); n > 0 {
 			m.newSkillName = m.newSkillName[:n-1]
 		}
-	case "esc":
-		m.mode = modeList
 	default:
 		if len(msg.Text) > 0 && msg.Mod == 0 {
 			m.newSkillName += msg.Text
@@ -322,7 +316,6 @@ func (m *Model) updateSkillName(msg tea.KeyPressMsg) (tabs.Tab, tea.Cmd) {
 	}
 	return m, nil
 }
-
 func (m *Model) View() string {
 	var b strings.Builder
 	switch m.mode {
@@ -364,7 +357,6 @@ func (m *Model) View() string {
 	}
 	return b.String()
 }
-
 func (m *Model) headerLine() string {
 	left, right := "AGENTS", "SKILLS"
 	var l, r string
@@ -375,15 +367,14 @@ func (m *Model) headerLine() string {
 	}
 	return l + " " + r + "  " + m.th.Muted().Render("h/l pane · j/k move · enter edit · n new · space toggle (skills) · r refresh") + "\n\n"
 }
-
 func (m *Model) agentsView() string {
 	if len(m.agents) == 0 {
 		return m.th.Muted().Render("no agents — press n to create one")
 	}
 	var b strings.Builder
-	b.WriteString(m.th.Accent().Render(pad("NAME", 16)+pad("MODEL", 22)) + "PROMPT\n")
+	b.WriteString(m.th.Accent().Render(tabs.Pad("NAME", 16)+tabs.Pad("MODEL", 22)) + "PROMPT\n")
 	for i, a := range m.agents {
-		row := pad(trunc(a.Name, 15), 16) + pad(trunc(a.Model, 21), 22) + trunc(oneLine(a.SystemPrompt), 44)
+		row := tabs.Pad(tabs.Trunc(a.Name, 15), 16) + tabs.Pad(tabs.Trunc(a.Model, 21), 22) + tabs.Trunc(oneLine(a.SystemPrompt), 44)
 		if i == m.selA {
 			b.WriteString(m.th.Accent().Render("▶ "+row) + "\n")
 		} else {
@@ -392,19 +383,18 @@ func (m *Model) agentsView() string {
 	}
 	return b.String()
 }
-
 func (m *Model) skillsView() string {
 	if len(m.skills) == 0 {
 		return m.th.Muted().Render("no skills — press n to add one (~/.config/charmulet/skills)")
 	}
 	var b strings.Builder
-	b.WriteString(m.th.Accent().Render(pad("SKILL", 20)+pad("STATE", 10)) + "DESC\n")
+	b.WriteString(m.th.Accent().Render(tabs.Pad("SKILL", 20)+tabs.Pad("STATE", 10)) + "DESC\n")
 	for i, s := range m.skills {
-		st := m.th.Muted().Render(pad("off", 10))
+		st := m.th.Muted().Render(tabs.Pad("off", 10))
 		if s.Enabled {
-			st = m.th.Secondary().Render(pad("on", 10))
+			st = m.th.Secondary().Render(tabs.Pad("on", 10))
 		}
-		row := pad(trunc(s.Name, 19), 20) + st + trunc(s.Desc, 48)
+		row := tabs.Pad(tabs.Trunc(s.Name, 19), 20) + st + tabs.Trunc(s.Desc, 48)
 		if i == m.selS {
 			b.WriteString(m.th.Accent().Render("▶ "+row) + "\n")
 		} else {
@@ -413,7 +403,6 @@ func (m *Model) skillsView() string {
 	}
 	return b.String()
 }
-
 func (m *Model) renderOverlay() string {
 	var title string
 	if m.mode == modeField {
@@ -424,7 +413,6 @@ func (m *Model) renderOverlay() string {
 	return m.th.Secondary().Render("editing "+title) + "  " +
 		m.th.Muted().Render("esc commit") + "\n" + m.ta.View()
 }
-
 func oneLine(s string) string {
 	s = strings.ReplaceAll(s, "\n", " ⏎ ")
 	if len(s) > 60 {
@@ -435,24 +423,6 @@ func oneLine(s string) string {
 	}
 	return s
 }
-
-func pad(s string, n int) string {
-	if len(s) >= n {
-		return s
-	}
-	return s + strings.Repeat(" ", n-len(s))
-}
-
-func trunc(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	if n <= 1 {
-		return s[:n]
-	}
-	return s[:n-1] + "…"
-}
-
 func readFile(p string) string {
 	b, err := os.ReadFile(p)
 	if err != nil {
@@ -460,7 +430,6 @@ func readFile(p string) string {
 	}
 	return string(b)
 }
-
 func writeFile(p, body string) error {
 	return os.WriteFile(p, []byte(body), 0o644)
 }

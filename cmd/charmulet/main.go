@@ -101,6 +101,9 @@ func runTUI(themeName, resumeQuery, version string) error {
 	if rt := resumeTab(st, th, prov, resumeQuery); rt != nil {
 		initial = append(initial, rt)
 	} else {
+		if resumeQuery != "" {
+			fmt.Fprintf(os.Stderr, "no session matches %q — starting fresh\n", resumeQuery)
+		}
 		initial = append(initial, chat.New(th, prov, cfg.ChatModel))
 	}
 	initial = append(initial,
@@ -119,7 +122,7 @@ func runTUI(themeName, resumeQuery, version string) error {
 	return err
 }
 
-const appVersion = "0.1.0-p4"
+const appVersion = "0.1.0"
 
 func main() {
 	var themeName, resumeQuery string

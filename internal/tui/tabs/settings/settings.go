@@ -53,6 +53,9 @@ func (m *Model) Activate() tea.Cmd {
 }
 func (m *Model) Deactivate() {}
 
+// Esc has no in-tab meaning here; the shell may quit.
+func (m *Model) Esc() bool { return false }
+
 // applyTheme fans the new theme out shell-wide and persists the choice.
 func (m *Model) applyTheme(th theme.Theme) tea.Cmd {
 	m.th = th

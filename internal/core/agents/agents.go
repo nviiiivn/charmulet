@@ -94,20 +94,6 @@ func Save(a Agent) error {
 	return os.WriteFile(p, b, 0o644)
 }
 
-// Load reads one agent by name; os.ErrNotExist surfaces to the caller.
-func Load(name string) (Agent, error) {
-	var a Agent
-	p, err := agentPath(name)
-	if err != nil {
-		return a, err
-	}
-	b, err := os.ReadFile(p)
-	if err != nil {
-		return a, err
-	}
-	return a, toml.Unmarshal(b, &a)
-}
-
 // Remove deletes an agent file — used only for rename-on-save, never exposed
 // as a tab action.
 func Remove(name string) error {

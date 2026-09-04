@@ -124,7 +124,7 @@ func (s *Store) Create(title, model string) (SessionMeta, error) {
 	return SessionMeta{ID: id, Title: title, Model: model, CreatedAt: now, UpdatedAt: now}, nil
 }
 
-// Append adds a message to a session and touches its updated_at.
+// Append adds a message to a session and touches its updated_at, atomically.
 func (s *Store) Append(sid int64, role, content string) error {
 	if s == nil || s.db == nil || sid == 0 {
 		return nil
@@ -133,14 +133,21 @@ func (s *Store) Append(sid int64, role, content string) error {
 		return nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	if _, err := s.db.Exec(
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(
 		`INSERT INTO messages (session_id, role, content, created_at) VALUES (?, ?, ?, ?)`,
 		sid, role, content, now,
 	); err != nil {
 		return err
 	}
-	_, err := s.db.Exec(`UPDATE sessions SET updated_at = ? WHERE id = ?`, now, sid)
-	return err
+	if _, err := tx.Exec(`UPDATE sessions SET updated_at = ? WHERE id = ?`, now, sid); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // List returns sessions newest-first with message counts.

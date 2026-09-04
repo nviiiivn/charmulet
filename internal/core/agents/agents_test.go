@@ -20,18 +20,10 @@ func TestAgentRoundtrip(t *testing.T) {
 	if err := Save(a); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-
-	got, err := Load("nightowl")
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	if got != a {
-		t.Fatalf("roundtrip mismatch: %+v vs %+v", got, a)
+	if err := Save(Agent{Name: "beta", Model: "gemma4:e4b", SystemPrompt: "Second agent."}); err != nil {
+		t.Fatalf("save beta: %v", err)
 	}
 
-	if err := Save(Agent{Name: "beta", Model: "gemma4:e4b"}); err != nil {
-		t.Fatalf("save 2: %v", err)
-	}
 	list, err := List()
 	if err != nil {
 		t.Fatalf("list: %v", err)
@@ -66,9 +58,6 @@ func TestAgentRoundtrip(t *testing.T) {
 	}
 
 	// Path traversal rejected.
-	if _, err := Load("../escape"); err == nil {
-		t.Fatal("traversal load should fail")
-	}
 	if err := Save(Agent{Name: "../escape", Model: "x"}); err == nil {
 		t.Fatal("traversal save should fail")
 	}

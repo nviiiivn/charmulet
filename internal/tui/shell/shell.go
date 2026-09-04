@@ -110,6 +110,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.help = false
 				return m, nil
 			}
+			// the active tab gets first claim (cancel stream, close
+			// overlay/viewer); quit only when nobody wants it
+			if m.Active().Esc() {
+				return m, nil
+			}
 			return m, tea.Quit
 		case "?":
 			m.help = !m.help
@@ -163,11 +168,22 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// everything else goes to the focused tab only
-	var cmd tea.Cmd
-	newTab, c := m.Active().Update(msg)
+	// messages owned by a tab (streams, poll results) reach that tab even
+	// when it is not focused, so background work keeps flowing
+	if tm, ok := msg.(tabs.TabMsg); ok {
+		for i, t := range m.tabs {
+			if t.ID() == tm.TabID() {
+				nt, cmd := t.Update(msg)
+				m.tabs[i] = nt
+				return m, cmd
+			}
+		}
+		return m, nil // owner closed; drop
+	}
+
+	// everything else goes to the focused tab
+	newTab, cmd := m.Active().Update(msg)
 	m.tabs[m.active] = newTab
-	cmd = c
 	return m, cmd
 }
 
@@ -178,7 +194,7 @@ func (m *Model) overlay(body string) string {
 	rows := []string{
 		m.th.TabActive().Render(" CHARMULET "),
 		"",
-		m.th.Accent().Render("tabs") + "     tab / shift+tab cycle · 1-9 jump · ctrl+w close spawned",
+		m.th.Accent().Render("tabs") + "     tab / shift+tab cycle · 1-9 jump · ctrl+w close spawned · esc backs out, then quits",
 		m.th.Accent().Render("chat") + "     enter send · esc cancel stream",
 		m.th.Accent().Render("launch") + "   pick model → spawns a parallel chat session",
 		m.th.Accent().Render("sessions") + " resume past conversations · enter reopen",
@@ -299,7 +315,7 @@ func (m *Model) View() tea.View {
 	// --- status bar ---
 	status := m.status
 	if status == "" {
-		status = fmt.Sprintf("charmulet P4 · theme:%s · %s", m.th.Name, m.Active().ID())
+		status = fmt.Sprintf("charmulet · theme:%s · %s", m.th.Name, m.Active().ID())
 	}
 	sb := m.th.StatusBar().Render(status)
 	if pad := m.w - lipgloss.Width(sb); pad > 0 {

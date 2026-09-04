@@ -4,7 +4,10 @@ package chat
 
 import (
 	"context"
+	"strconv"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/viewport"
@@ -17,13 +20,54 @@ import (
 	"github.com/nvii/charmulet/internal/tui/theme"
 )
 
-type errMsg struct{ err error }
+// flushInterval coalesces streamed tokens into one repaint per tick so a
+// long transcript is not re-wrapped on every chunk.
+const flushInterval = 30 * time.Millisecond
 
-type tokenMsg struct{ text string }
+var sessionSeq atomic.Int64
 
-type streamDoneMsg struct{ err error }
+// nextID hands out unique tab IDs ("chat", "chat-2", "chat-3", …) so
+// parallel sessions each own their stream messages.
+func nextID() string {
+	n := sessionSeq.Add(1)
+	if n == 1 {
+		return "chat"
+	}
+	return "chat-" + strconv.FormatInt(n, 10)
+}
+
+type errMsg struct {
+	id  string
+	err error
+}
+
+func (m errMsg) TabID() string { return m.id }
+
+type tokenMsg struct {
+	id   string
+	text string
+}
+
+func (m tokenMsg) TabID() string { return m.id }
+
+type streamDoneMsg struct {
+	id  string
+	err error
+}
+
+func (m streamDoneMsg) TabID() string { return m.id }
+
+// flushMsg triggers the deferred repaint that batches streamed tokens.
+type flushMsg struct{ id string }
+
+func (m flushMsg) TabID() string { return m.id }
+
+func flushCmd(id string) tea.Cmd {
+	return tea.Tick(flushInterval, func(time.Time) tea.Msg { return flushMsg{id: id} })
+}
 
 type Model struct {
+	id   string
 	ta   textarea.Model
 	vp   viewport.Model
 	log  []string
@@ -39,6 +83,7 @@ type Model struct {
 	cur       provider.Stream
 	buf       strings.Builder
 	pending   string // user text of the in-flight turn
+	flushing  bool   // a flush tick is armed; skip repaints until it lands
 
 	title string // tab-bar label; "CHAT" for the default session
 
@@ -54,12 +99,16 @@ func New(th theme.Theme, prov provider.Provider, model string) *Model {
 
 // NewSession creates a spawned chat tab with a model-derived title
 // (used by the launcher for parallel sessions). A non-nil store backs it
-// with a persisted session row.
+// with a persisted session row; on store failure the title is marked '*'
+// so the ephemeral tab is visibly unpersisted.
 func NewSession(th theme.Theme, prov provider.Provider, model string, st *session.Store) *Model {
-	m := newModel(th, prov, model, sessionTitle(model))
+	title := sessionTitle(model)
+	m := newModel(th, prov, model, title)
 	if st != nil {
 		if meta, err := st.Create(m.title, model); err == nil {
 			m.st, m.sid = st, meta.ID
+		} else {
+			m.title = title + "*"
 		}
 	}
 	return m
@@ -89,6 +138,7 @@ func NewResume(th theme.Theme, prov provider.Provider, st *session.Store, meta s
 
 func newModel(th theme.Theme, prov provider.Provider, model, title string) *Model {
 	m := &Model{
+		id:    nextID(),
 		th:    th,
 		prov:  prov,
 		model: model,
@@ -122,12 +172,21 @@ func sessionTitle(model string) string {
 }
 
 func (m *Model) Title() string { return m.title }
-func (m *Model) ID() string    { return "chat" }
+func (m *Model) ID() string    { return m.id }
 
 func (m *Model) Init() tea.Cmd { return textarea.Blink }
 
 func (m *Model) Activate() tea.Cmd { return nil }
 func (m *Model) Deactivate()       {}
+
+// Esc cancels an in-flight generation; consumed only while streaming.
+func (m *Model) Esc() bool {
+	if m.streaming && m.cancel != nil {
+		m.cancel()
+		return true
+	}
+	return false
+}
 
 func (m *Model) Resize(w, h int) {
 	m.w, m.h = w, h
@@ -139,17 +198,26 @@ func (m *Model) Resize(w, h int) {
 }
 
 // pump reads the next chunk off the live stream as a self-rescheduling cmd.
-func pump(s provider.Stream) tea.Cmd {
+func pump(id string, s provider.Stream) tea.Cmd {
 	return func() tea.Msg {
 		chunk, ok, err := s()
 		switch {
 		case err != nil:
-			return streamDoneMsg{err}
+			return streamDoneMsg{id: id, err: err}
 		case !ok:
-			return streamDoneMsg{}
+			return streamDoneMsg{id: id}
 		default:
-			return tokenMsg{chunk}
+			return tokenMsg{id: id, text: chunk}
 		}
+	}
+}
+
+// appendCmd persists a turn off the event loop (nil store no-ops).
+func (m *Model) appendCmd(role, content string) tea.Cmd {
+	st, sid := m.st, m.sid
+	return func() tea.Msg {
+		_ = st.Append(sid, role, content)
+		return nil
 	}
 }
 
@@ -163,16 +231,16 @@ func (m *Model) start(userText string) tea.Cmd {
 	m.streaming = true
 	m.buf.Reset()
 	m.pending = userText
-	_ = m.st.Append(m.sid, "user", userText) // best-effort; nil store no-ops
+	persist := m.appendCmd("user", userText)
 
 	s, err := m.prov.Complete(ctx, m.model, msgs)
 	if err != nil {
 		cancel()
 		m.streaming = false
-		return func() tea.Msg { return errMsg{err} }
+		return tea.Batch(persist, func() tea.Msg { return errMsg{id: m.id, err: err} })
 	}
 	m.cur = s
-	return pump(s)
+	return tea.Batch(persist, pump(m.id, s))
 }
 
 func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
@@ -182,6 +250,7 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 	case tabs.SetThemeMsg:
 		m.th = msg.Theme
 		return m, nil
+
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "enter":
@@ -193,17 +262,34 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 				m.ta.Reset()
 				cmds = append(cmds, m.start(val))
 			}
-		case "esc":
-			if m.streaming && m.cancel != nil {
-				m.cancel()
-			}
 		}
 
 	case tokenMsg:
+		if msg.id != m.id {
+			return m, nil // another session's stream
+		}
 		m.buf.WriteString(msg.text)
-		cmds = append(cmds, pump(m.cur))
+		cmds = append(cmds, pump(m.id, m.cur))
+		if !m.flushing {
+			m.flushing = true
+			cmds = append(cmds, flushCmd(m.id))
+		}
+		// Deferred repaint: the flush tick below materializes the buffer,
+		// so a burst of tokens costs one re-wrap, not one per chunk.
+		var cmd tea.Cmd
+		m.ta, cmd = m.ta.Update(msg)
+		return m, tea.Batch(append(cmds, cmd)...)
+
+	case flushMsg:
+		if msg.id != m.id {
+			return m, nil
+		}
+		m.flushing = false
 
 	case streamDoneMsg:
+		if msg.id != m.id {
+			return m, nil
+		}
 		text := strings.TrimSpace(m.buf.String())
 		if text != "" {
 			m.log = append(m.log,
@@ -215,7 +301,7 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 		m.hist = append(m.hist, provider.Message{Role: "user", Content: m.pending})
 		if text != "" {
 			m.hist = append(m.hist, provider.Message{Role: "assistant", Content: text})
-			_ = m.st.Append(m.sid, "assistant", text)
+			cmds = append(cmds, m.appendCmd("assistant", text))
 		}
 		m.pending = ""
 		m.streaming = false
@@ -225,6 +311,9 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 		}
 
 	case errMsg:
+		if msg.id != m.id {
+			return m, nil
+		}
 		m.log = append(m.log, m.th.TabActive().Render(" err ")+msg.err.Error(), "")
 		m.streaming = false
 	}
@@ -233,11 +322,15 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 	m.ta, cmd = m.ta.Update(msg)
 	cmds = append(cmds, cmd)
 
+	m.repaint()
+	return m, tea.Batch(cmds...)
+}
+
+// repaint pushes the rendered transcript into the viewport.
+func (m *Model) repaint() {
 	content := lipgloss.NewStyle().Width(m.w).Render(strings.Join(m.renderLog(), "\n"))
 	m.vp.SetContent(content)
 	m.vp.GotoBottom()
-
-	return m, tea.Batch(cmds...)
 }
 
 // renderLog materializes log lines plus any in-flight buffer tail.

@@ -55,6 +55,15 @@ func (m *Model) Activate() tea.Cmd {
 
 func (m *Model) Deactivate() {}
 
+// Esc closes the file viewer; otherwise the shell may quit.
+func (m *Model) Esc() bool {
+	if m.viewing {
+		m.viewing = false
+		return true
+	}
+	return false
+}
+
 func (m *Model) load(dir string) error {
 	des, err := os.ReadDir(dir)
 	if err != nil {
@@ -158,7 +167,7 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 
 	if m.viewing {
 		switch key.String() {
-		case "esc", "q":
+		case "q":
 			m.viewing = false
 			return m, nil
 		default:

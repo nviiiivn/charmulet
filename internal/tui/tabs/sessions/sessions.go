@@ -3,31 +3,27 @@
 package sessions
 
 import (
-	"fmt"
-	"strings"
-	"time"
-
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-
+	"fmt"
 	"github.com/nvii/charmulet/internal/core/provider"
 	"github.com/nvii/charmulet/internal/core/session"
 	"github.com/nvii/charmulet/internal/tui/tabs"
 	"github.com/nvii/charmulet/internal/tui/tabs/chat"
 	"github.com/nvii/charmulet/internal/tui/theme"
+	"strings"
+	"time"
 )
 
 type listedMsg struct {
 	metas []session.SessionMeta
 	err   error
 }
-
 type Model struct {
-	th   theme.Theme
-	prov provider.Provider
-	st   *session.Store
-	w, h int
-
+	th     theme.Theme
+	prov   provider.Provider
+	st     *session.Store
+	w, h   int
 	metas  []session.SessionMeta
 	sel    int
 	top    int
@@ -40,13 +36,14 @@ var _ tabs.Tab = (*Model)(nil)
 func New(th theme.Theme, prov provider.Provider, st *session.Store) *Model {
 	return &Model{th: th, prov: prov, st: st}
 }
-
-func (m *Model) Title() string { return "SESSIONS" }
-func (m *Model) ID() string    { return "sessions" }
-func (m *Model) Init() tea.Cmd { return nil }
-
+func (m *Model) Title() string     { return "SESSIONS" }
+func (m *Model) ID() string        { return "sessions" }
+func (m *Model) Init() tea.Cmd     { return nil }
 func (m *Model) Activate() tea.Cmd { return listCmd(m.st) }
 func (m *Model) Deactivate()       {}
+
+// Esc has no in-tab meaning here; the shell may quit.
+func (m *Model) Esc() bool { return false }
 
 func listCmd(st *session.Store) tea.Cmd {
 	return func() tea.Msg {
@@ -66,13 +63,11 @@ func (m *Model) resumeCmd(meta session.SessionMeta) tea.Cmd {
 		return tabs.SpawnMsg{Tab: chat.NewResume(th, prov, st, meta, msgs)}
 	}
 }
-
 func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tabs.SetThemeMsg:
 		m.th = msg.Theme
 		return m, nil
-
 	case listedMsg:
 		m.loaded = true
 		m.err = ""
@@ -88,17 +83,8 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 			m.sel = 0
 		}
 		return m, nil
-
 	case tea.KeyPressMsg:
 		switch msg.String() {
-		case "j", "down":
-			if m.sel < len(m.metas)-1 {
-				m.sel++
-			}
-		case "k", "up":
-			if m.sel > 0 {
-				m.sel--
-			}
 		case "r", "R":
 			return m, listCmd(m.st)
 		case "enter":
@@ -106,10 +92,12 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 				return m, m.resumeCmd(m.metas[m.sel])
 			}
 		}
+		if n, ok := tabs.MoveSel(m.sel, len(m.metas), msg); ok {
+			m.sel = n
+		}
 	}
 	return m, nil
 }
-
 func (m *Model) Resize(w, h int) { m.w, m.h = w, h }
 
 // relTime renders "5m", "3h", "2d" style ages.
@@ -126,12 +114,10 @@ func relTime(t time.Time) string {
 		return fmt.Sprintf("%dd", int(d.Hours()/24))
 	}
 }
-
 func (m *Model) View() string {
 	var b strings.Builder
 	b.WriteString(m.th.Secondary().Render("sessions") + "  " +
 		m.th.Muted().Render("j/k move · enter resume · r refresh") + "\n")
-
 	switch {
 	case m.err != "":
 		b.WriteString(m.th.Tertiary().Render("⚠ " + m.err))
@@ -153,17 +139,16 @@ func (m *Model) View() string {
 		if m.sel >= m.top+vis {
 			m.top = m.sel - vis + 1
 		}
-
 		titleW, modelW := 26, 24
 		head := lipgloss.NewStyle().
 			Foreground(m.th.AccentColor()).
-			Render(pad("SESSION", titleW+2) + pad("MODEL", modelW+2) + "MS   AGE")
+			Render(tabs.Pad("SESSION", titleW+2) + tabs.Pad("MODEL", modelW+2) + "MS   AGE")
 		b.WriteString(head + "\n")
 		for i := m.top; i < m.top+vis && i < len(m.metas); i++ {
 			meta := m.metas[i]
-			row := pad(trunc(meta.Title, titleW), titleW+2) +
-				pad(trunc(meta.Model, modelW), modelW+2) +
-				pad(fmt.Sprintf("%d", meta.MsgCount), 5) +
+			row := tabs.Pad(tabs.Trunc(meta.Title, titleW), titleW+2) +
+				tabs.Pad(tabs.Trunc(meta.Model, modelW), modelW+2) +
+				tabs.Pad(fmt.Sprintf("%d", meta.MsgCount), 5) +
 				relTime(meta.UpdatedAt)
 			if i == m.sel {
 				b.WriteString(m.th.Accent().Render("▶ "+row) + "\n")
@@ -175,21 +160,4 @@ func (m *Model) View() string {
 		b.WriteString(m.th.Secondary().Render(count))
 	}
 	return b.String()
-}
-
-func pad(s string, n int) string {
-	if len(s) >= n {
-		return s
-	}
-	return s + strings.Repeat(" ", n-len(s))
-}
-
-func trunc(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	if n <= 1 {
-		return s[:n]
-	}
-	return s[:n-1] + "…"
 }

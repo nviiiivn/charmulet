@@ -4,18 +4,15 @@
 package fronts
 
 import (
-	"fmt"
-	"net/http"
-	"sort"
-	"strings"
-	"sync"
-	"time"
-
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-
+	"fmt"
 	"github.com/nvii/charmulet/internal/tui/tabs"
 	"github.com/nvii/charmulet/internal/tui/theme"
+	"net/http"
+	"sort"
+	"sync"
+	"time"
 )
 
 const refreshEvery = 10 * time.Second
@@ -61,9 +58,12 @@ type result struct {
 	Err    string
 }
 
-type tickMsg struct{}
-type resultsMsg struct{ results []result }
-
+// tickMsg/resultsMsg carry the poll-chain generation; stale msgs are dropped.
+type tickMsg struct{ gen int }
+type resultsMsg struct {
+	results []result
+	gen     int
+}
 type Model struct {
 	th      theme.Theme
 	w, h    int
@@ -72,6 +72,7 @@ type Model struct {
 	sel     int
 	last    time.Time
 	loading bool
+	gen     int // poll-chain generation; bumps on every new arm
 }
 
 var _ tabs.Tab = (*Model)(nil)
@@ -81,18 +82,18 @@ func New(th theme.Theme) *Model {
 	sort.Slice(fs, func(i, j int) bool { return fs[i].Name < fs[j].Name })
 	return &Model{th: th, fronts: fs}
 }
-
 func (m *Model) Title() string { return "FRONTS" }
 func (m *Model) ID() string    { return "fronts" }
-
-func (m *Model) Init() tea.Cmd { return checkCmd(m.fronts) }
-
+func (m *Model) Init() tea.Cmd { return checkCmd(m.fronts, m.gen) }
 func (m *Model) Activate() tea.Cmd {
 	m.loading = true
-	return checkCmd(m.fronts)
+	m.gen++
+	return checkCmd(m.fronts, m.gen)
 }
-
 func (m *Model) Deactivate() {}
+
+// Esc has no in-tab meaning here; the shell may quit.
+func (m *Model) Esc() bool { return false }
 
 func checkOne(f Front, wg *sync.WaitGroup, out []result, i int) {
 	defer wg.Done()
@@ -116,8 +117,7 @@ func checkOne(f Front, wg *sync.WaitGroup, out []result, i int) {
 	r.Status = resp.StatusCode
 	out[i] = r
 }
-
-func checkCmd(fronts []Front) tea.Cmd {
+func checkCmd(fronts []Front, gen int) tea.Cmd {
 	return func() tea.Msg {
 		out := make([]result, len(fronts))
 		var wg sync.WaitGroup
@@ -126,60 +126,47 @@ func checkCmd(fronts []Front) tea.Cmd {
 			go checkOne(f, &wg, out, i)
 		}
 		wg.Wait()
-		return resultsMsg{results: out}
+		return resultsMsg{results: out, gen: gen}
 	}
 }
-
-func tick() tea.Cmd {
-	return tea.Tick(refreshEvery, func(time.Time) tea.Msg { return tickMsg{} })
+func tick(gen int) tea.Cmd {
+	return tea.Tick(refreshEvery, func(time.Time) tea.Msg { return tickMsg{gen: gen} })
 }
-
 func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tabs.SetThemeMsg:
 		m.th = msg.Theme
 		return m, nil
-
 	case tickMsg:
-		return m, checkCmd(m.fronts)
+		if msg.gen != m.gen {
+			return m, nil // stale chain; let it die
+		}
+		return m, checkCmd(m.fronts, m.gen)
 	case resultsMsg:
+		if msg.gen != m.gen {
+			return m, nil
+		}
 		m.loading = false
 		m.results = msg.results
 		m.last = time.Now()
 		if m.sel >= len(m.results) {
 			m.sel = len(m.results) - 1
 		}
-		return m, tick()
+		return m, tick(msg.gen)
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "r", "R":
 			m.loading = true
-			return m, checkCmd(m.fronts)
-		case "j", "down":
-			if m.sel < len(m.results)-1 {
-				m.sel++
-			}
-		case "k", "up":
-			if m.sel > 0 {
-				m.sel--
-			}
+			m.gen++
+			return m, checkCmd(m.fronts, m.gen)
+		}
+		if n, ok := tabs.MoveSel(m.sel, len(m.results), msg); ok {
+			m.sel = n
 		}
 	}
 	return m, nil
 }
-
 func (m *Model) Resize(w, h int) { m.w, m.h = w, h }
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	if n <= 1 {
-		return s[:n]
-	}
-	return s[:n-1] + "…"
-}
-
 func (m *Model) View() string {
 	stamp := "loading…"
 	if !m.last.IsZero() {
@@ -189,11 +176,9 @@ func (m *Model) View() string {
 		stamp += " · refreshing"
 	}
 	head := m.th.Secondary().Render("fronts") + m.th.Muted().Render(" · "+stamp+" · any HTTP response = up")
-
 	if m.results == nil {
 		return head + "\n" + m.th.Muted().Render("checking…")
 	}
-
 	up := 0
 	for _, r := range m.results {
 		if r.Up {
@@ -206,23 +191,22 @@ func (m *Model) View() string {
 	} else {
 		sum = m.th.Tertiary().Render(sum)
 	}
-
 	nameW, urlW := 22, 42
 	rows := []string{m.th.Muted().Render(
-		pad("FRONT", nameW+1) + pad("URL", urlW+1) + pad("ST", 5) + "MS")}
+		tabs.Pad("FRONT", nameW+1) + tabs.Pad("URL", urlW+1) + tabs.Pad("ST", 5) + "MS")}
 	for i, r := range m.results {
 		marker := m.th.Tertiary().Render("●")
 		if r.Up {
 			marker = lipgloss.NewStyle().Foreground(lipgloss.Color("#3fb950")).Render("●")
 		}
-		name := truncate(r.Name, nameW)
-		url := truncate(r.URL, urlW)
+		name := tabs.Trunc(r.Name, nameW)
+		url := tabs.Trunc(r.URL, urlW)
 		status := "—"
 		if r.Up {
 			status = fmt.Sprintf("%d", r.Status)
 		}
 		ms := fmt.Sprintf("%3.0f", float64(r.MS.Milliseconds()))
-		line := pad(name, nameW+1) + pad(url, urlW+1) + pad(status, 5) + ms
+		line := tabs.Pad(name, nameW+1) + tabs.Pad(url, urlW+1) + tabs.Pad(status, 5) + ms
 		if i == m.sel {
 			line = marker + " " + m.th.Accent().Render(line)
 		} else {
@@ -230,16 +214,7 @@ func (m *Model) View() string {
 		}
 		rows = append(rows, line)
 	}
-
 	sel := m.results[m.sel]
-	detail := m.th.Muted().Render(truncate(sel.URL+"  "+sel.Err, max(m.w-2, 10)))
-
+	detail := m.th.Muted().Render(tabs.Trunc(sel.URL+"  "+sel.Err, max(m.w-2, 10)))
 	return head + "  " + sum + "\n" + lipgloss.JoinVertical(lipgloss.Left, rows...) + "\n" + detail
-}
-
-func pad(s string, n int) string {
-	if len(s) >= n {
-		return s
-	}
-	return s + strings.Repeat(" ", n-len(s))
 }

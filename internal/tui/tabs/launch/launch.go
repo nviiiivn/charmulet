@@ -1,20 +1,18 @@
 // Package launch is the launcher tab: pick a model (or wrapper) and spawn
-// parallel chat sessions. Wrappers run in docker — the worker layer lands
-// with P4; until then they list read-only.
+// parallel chat sessions. Wrappers run in docker — the worker layer is
+// confirm-gated and not wired yet; until then they list read-only.
 package launch
 
 import (
-	"fmt"
-	"strings"
-
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-
+	"fmt"
 	"github.com/nvii/charmulet/internal/core/provider"
 	"github.com/nvii/charmulet/internal/core/session"
 	"github.com/nvii/charmulet/internal/tui/tabs"
 	"github.com/nvii/charmulet/internal/tui/tabs/chat"
 	"github.com/nvii/charmulet/internal/tui/theme"
+	"strings"
 )
 
 type srcKind int
@@ -49,19 +47,16 @@ type modelsMsg struct {
 	models []string
 	err    error
 }
-
 type Model struct {
-	th   theme.Theme
-	prov provider.Provider
-	st   *session.Store
-	w, h int
-
-	pane  int // 0 = sources, 1 = detail
-	selL  int
-	selR  int
-	top   int // model list scroll window
-	model []string
-
+	th      theme.Theme
+	prov    provider.Provider
+	st      *session.Store
+	w, h    int
+	pane    int // 0 = sources, 1 = detail
+	selL    int
+	selR    int
+	top     int // model list scroll window
+	model   []string
 	loading bool
 	loadErr string
 	spawned int
@@ -73,11 +68,9 @@ var _ tabs.Tab = (*Model)(nil)
 func New(th theme.Theme, prov provider.Provider, st *session.Store) *Model {
 	return &Model{th: th, prov: prov, st: st}
 }
-
 func (m *Model) Title() string { return "LAUNCH" }
 func (m *Model) ID() string    { return "launch" }
 func (m *Model) Init() tea.Cmd { return nil }
-
 func (m *Model) Activate() tea.Cmd {
 	if m.prov != nil && m.model == nil && !m.loading {
 		m.loading = true
@@ -85,8 +78,10 @@ func (m *Model) Activate() tea.Cmd {
 	}
 	return nil
 }
-
 func (m *Model) Deactivate() {}
+
+// Esc has no in-tab meaning here; the shell may quit.
+func (m *Model) Esc() bool { return false }
 
 func loadCmd(prov provider.Provider) tea.Cmd {
 	return func() tea.Msg {
@@ -97,13 +92,11 @@ func loadCmd(prov provider.Provider) tea.Cmd {
 		return modelsMsg{models: ms}
 	}
 }
-
 func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tabs.SetThemeMsg:
 		m.th = msg.Theme
 		return m, nil
-
 	case modelsMsg:
 		m.loading = false
 		if msg.err != nil {
@@ -117,23 +110,8 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 			m.pane = 1
 		}
 		return m, nil
-
 	case tea.KeyPressMsg:
 		switch msg.String() {
-		case "j", "down":
-			if m.pane == 0 && m.selL < len(sources)-1 {
-				m.selL++
-			}
-			if m.pane == 1 && m.selR < len(m.model)-1 {
-				m.selR++
-			}
-		case "k", "up":
-			if m.pane == 0 && m.selL > 0 {
-				m.selL--
-			}
-			if m.pane == 1 && m.selR > 0 {
-				m.selR--
-			}
 		case "h", "left":
 			m.pane = 0
 		case "l", "right":
@@ -168,25 +146,20 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 				return m, func() tea.Msg { return tabs.SpawnMsg{Tab: np} }
 			}
 		}
+		if m.pane == 0 {
+			if n, ok := tabs.MoveSel(m.selL, len(sources), msg); ok {
+				m.selL = n
+			}
+		} else if n, ok := tabs.MoveSel(m.selR, len(m.model), msg); ok {
+			m.selR = n
+		}
 	}
 	return m, nil
 }
 
 // sources exists so the slice is addressable per-selection.
 func (m *Model) sources() []source { return sources }
-
-func (m *Model) Resize(w, h int) { m.w, m.h = w, h }
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	if n <= 1 {
-		return s[:n]
-	}
-	return s[:n-1] + "…"
-}
-
+func (m *Model) Resize(w, h int)   { m.w, m.h = w, h }
 func (m *Model) box(focused bool) lipgloss.Style {
 	b := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -197,7 +170,6 @@ func (m *Model) box(focused bool) lipgloss.Style {
 	}
 	return b
 }
-
 func (m *Model) leftCol() string {
 	var rows []string
 	for i, s := range sources {
@@ -214,7 +186,6 @@ func (m *Model) leftCol() string {
 	}
 	return m.box(m.pane == 0).Render(strings.Join(rows, "\n"))
 }
-
 func (m *Model) rightCol() string {
 	sel := sources[m.selL]
 	var body string
@@ -222,7 +193,7 @@ func (m *Model) rightCol() string {
 	case srcWrapper:
 		body = m.th.Accent().Render(sel.name) + "\n" +
 			m.th.Secondary().Render(sel.desc) + "\n\n" +
-			m.th.Muted().Render("runs in docker · worker layer lands in P4\n(you'll launch it here — confirm-gated)")
+			m.th.Muted().Render("runs in docker · worker layer coming\n(you'll launch it here — confirm-gated)")
 	default:
 		switch {
 		case m.loading:
@@ -248,7 +219,7 @@ func (m *Model) rightCol() string {
 			}
 			var rows []string
 			for i := m.top; i < m.top+vis && i < len(m.model); i++ {
-				name := truncate(m.model[i], 44)
+				name := tabs.Trunc(m.model[i], 44)
 				if i == m.selR && m.pane == 1 {
 					rows = append(rows, m.th.Accent().Render("▶ "+name))
 				} else if i == m.selR {
@@ -264,7 +235,6 @@ func (m *Model) rightCol() string {
 	head := m.th.Secondary().Render(sel.name)
 	return m.box(m.pane == 1).Render(head + "\n" + body)
 }
-
 func (m *Model) View() string {
 	hint := "h/l pane · j/k move · enter spawn session · r reload"
 	if m.spawned > 0 {
