@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/nvii/charmulet/internal/core/config"
 	"github.com/nvii/charmulet/internal/core/session"
 	"github.com/nvii/charmulet/internal/tui/theme"
 )
@@ -77,5 +78,20 @@ func TestResumeTabLastAndEmpty(t *testing.T) {
 func TestResumeTabNilStore(t *testing.T) {
 	if tab := resumeTab(nil, theme.Default(), nil, "anything"); tab != nil {
 		t.Fatalf("nil store must resume nothing, got %v", tab)
+	}
+}
+
+// TestConfigExistsRespectsEnv: no file → false; file present → true.
+func TestConfigExistsRespectsEnv(t *testing.T) {
+	t.Setenv("CHARMULET_CONFIG_DIR", t.TempDir())
+	if configExists() {
+		t.Fatal("empty config dir must report no config")
+	}
+	cfg := &config.Config{OllamaURL: "http://x", ChatModel: "m", Theme: "pride"}
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if !configExists() {
+		t.Fatal("saved config must be found")
 	}
 }

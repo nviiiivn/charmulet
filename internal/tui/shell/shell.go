@@ -149,7 +149,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.close()
 			return m, m.Active().Activate()
 		default:
-			// number keys 1-9 jump straight to a tab
+			// number keys 1-9 jump straight to a tab; 0 jumps to tab 10
 			if len(msg.String()) == 1 && msg.String()[0] >= '1' && msg.String()[0] <= '9' {
 				idx := int(msg.String()[0] - '1')
 				if idx < len(m.tabs) && idx != m.active {
@@ -158,6 +158,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.Active().Activate()
 				}
 				return m, nil
+			}
+			if msg.String() == "0" && len(m.tabs) >= 10 {
+				m.Active().Deactivate()
+				m.active = 9
+				return m, m.Active().Activate()
 			}
 		}
 
@@ -214,6 +219,7 @@ func (m *Model) overlay(body string) string {
 		m.th.Accent().Render("sessions") + " resume past conversations · enter reopen",
 		m.th.Accent().Render("agents") + "   edit agent TOML · skills on/off · n new",
 		m.th.Accent().Render("settings") + " live theme switch · enter apply + save",
+		m.th.Accent().Render("pages") + "    custom TOML dashboards · h/l switch",
 		m.th.Accent().Render("runs") + "     fan-out prompt to many models",
 		m.th.Accent().Render("files") + "    j/k move · enter open · r refresh",
 		m.th.Accent().Render("viewer") + "  esc/q close file",
@@ -327,7 +333,11 @@ func (m *Model) View() tea.View {
 	// --- tab bar ---
 	var slots []string
 	for i, t := range m.tabs {
-		label := fmt.Sprintf(" %d %s ", i+1, t.Title())
+		digit := fmt.Sprintf("%d", i+1)
+		if i == 9 {
+			digit = "0" // '0' jumps to tab 10
+		}
+		label := fmt.Sprintf(" %s %s ", digit, t.Title())
 		if i == m.active {
 			slots = append(slots, m.th.TabActive().Render(label))
 		} else {

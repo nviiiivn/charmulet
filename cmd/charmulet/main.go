@@ -22,6 +22,7 @@ import (
 	filestabs "github.com/nvii/charmulet/internal/tui/tabs/files"
 	frontstabs "github.com/nvii/charmulet/internal/tui/tabs/fronts"
 	launchtabs "github.com/nvii/charmulet/internal/tui/tabs/launch"
+	pagestabs "github.com/nvii/charmulet/internal/tui/tabs/pages"
 	"github.com/nvii/charmulet/internal/tui/tabs/runs"
 	servicestabs "github.com/nvii/charmulet/internal/tui/tabs/services"
 	sessionstabs "github.com/nvii/charmulet/internal/tui/tabs/sessions"
@@ -84,7 +85,31 @@ func resumeTab(st *session.Store, th theme.Theme, prov provider.Provider, q stri
 	return chat.NewResume(th, prov, st, *meta, msgs)
 }
 
+// configExists reports whether any charmulet.toml is already on disk.
+func configExists() bool {
+	for _, p := range config.Paths() {
+		if _, err := os.Stat(p); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 func runTUI(themeName, resumeQuery, version string) error {
+	// First run with no config anywhere: walk her through setup before
+	// the shell takes over the screen. A -T override skips the wizard.
+	if themeName == "" && !configExists() {
+		cfg, err := config.Load()
+		if err != nil {
+			cfg = &config.Config{OllamaURL: "http://192.0.2.24:11434", ChatModel: "qwen3.5:9b"}
+		}
+		if cfg, err = runSetup(cfg, "themes"); err == nil {
+			_ = config.Save(cfg)
+		} else {
+			fmt.Fprintf(os.Stderr, "setup skipped: %v\n", err)
+		}
+	}
+
 	th := loadTheme(themeName)
 	cfg, err := config.Load()
 	if err != nil {
@@ -115,6 +140,7 @@ func runTUI(themeName, resumeQuery, version string) error {
 		sessionstabs.New(th, prov, st),
 		agents.New(th),
 		settingstabs.New(th, cfg, "themes", version),
+		pagestabs.New(th, dashURL()),
 	)
 
 	p := tea.NewProgram(shell.New(th, initial...))
@@ -145,11 +171,31 @@ func main() {
 		},
 	}
 
+	// `charmulet setup` re-runs the first-run wizard and saves.
+	setup := &cobra.Command{
+		Use:   "setup",
+		Short: "Re-run the setup wizard (ollama URL, model, theme)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				cfg = &config.Config{OllamaURL: "http://192.0.2.24:11434", ChatModel: "qwen3.5:9b"}
+			}
+			if cfg, err = runSetup(cfg, "themes"); err != nil {
+				return err
+			}
+			if err := config.Save(cfg); err != nil {
+				return err
+			}
+			fmt.Println("saved —", config.Paths()[len(config.Paths())-1])
+			return nil
+		},
+	}
+
 	root.Flags().BoolP("version", "v", false, "print version")
 	root.PersistentFlags().StringVarP(&themeName, "theme", "T", "", "theme name (themes/<name>.toml, default pride)")
 	root.PersistentFlags().StringVarP(&resumeQuery, "resume", "R", "", "resume a session by title/model substring, or \"last\"")
 
-	root.AddCommand(run)
+	root.AddCommand(run, setup)
 	ctx := context.Background()
 	if err := fang.Execute(ctx, root, fang.WithVersion(appVersion)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
