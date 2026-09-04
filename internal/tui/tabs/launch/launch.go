@@ -1,18 +1,22 @@
 // Package launch is the launcher tab: pick a model (or wrapper) and spawn
-// parallel chat sessions. Wrappers run in docker — the worker layer is
-// confirm-gated and not wired yet; until then they list read-only.
+// parallel chat sessions. Wrappers run in docker, confirm-gated: enter
+// shows the exact docker command, y spawns an attached WRAP tab.
 package launch
 
 import (
+	"fmt"
+	"strings"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"fmt"
+
 	"github.com/nvii/charmulet/internal/core/provider"
 	"github.com/nvii/charmulet/internal/core/session"
+	"github.com/nvii/charmulet/internal/core/wrappers"
 	"github.com/nvii/charmulet/internal/tui/tabs"
 	"github.com/nvii/charmulet/internal/tui/tabs/chat"
+	"github.com/nvii/charmulet/internal/tui/tabs/wrap"
 	"github.com/nvii/charmulet/internal/tui/theme"
-	"strings"
 )
 
 type srcKind int
@@ -28,20 +32,8 @@ type source struct {
 	kind srcKind
 }
 
-// wrappers is the locked fleet list (her decision): main CLIs/agents/tools.
-var sources = []source{
-	{"ollama", "live models on demo-desktop · enter spawns a chat session", srcModels},
-	{"hax", "agent cli", srcWrapper},
-	{"crush", "charm-stack agent (Go)", srcWrapper},
-	{"qwen", "qwen cli", srcWrapper},
-	{"claude", "claude code", srcWrapper},
-	{"codex", "openai codex cli", srcWrapper},
-	{"opencode", "opencode", srcWrapper},
-	{"hermes", "hermes agent · server on demo-desktop", srcWrapper},
-	{"openclaw", "openclaw gateway", srcWrapper},
-	{"agent-zero", "a0 · demo-desktop (sleeping)", srcWrapper},
-	{"totem", "her current cli", srcWrapper},
-}
+// wrappers fleet comes from the wrappers package (builtins + TOML overrides).
+// sources() materializes the launcher list: ollama first, then the fleet.
 
 type modelsMsg struct {
 	models []string
@@ -61,12 +53,15 @@ type Model struct {
 	loadErr string
 	spawned int
 	wantR   bool // enter pressed while loading — hop to model pane when it arrives
+	fleet   []wrappers.Wrapper
+	pending *wrappers.Wrapper // confirm gate: docker spawn awaiting y/n
+	status  string
 }
 
 var _ tabs.Tab = (*Model)(nil)
 
 func New(th theme.Theme, prov provider.Provider, st *session.Store) *Model {
-	return &Model{th: th, prov: prov, st: st}
+	return &Model{th: th, prov: prov, st: st, fleet: wrappers.List()}
 }
 func (m *Model) Title() string { return "LAUNCH" }
 func (m *Model) ID() string    { return "launch" }
@@ -111,6 +106,25 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyPressMsg:
+		// confirm gate swallows everything until y/n
+		if m.pending != nil {
+			switch msg.String() {
+			case "y", "Y":
+				w := *m.pending
+				m.pending = nil
+				np, err := wrap.New(m.th, w)
+				if err != nil {
+					m.status = "⚠ " + err.Error()
+					return m, nil
+				}
+				m.spawned++
+				return m, func() tea.Msg { return tabs.SpawnMsg{Tab: np} }
+			case "n", "N", "esc":
+				m.pending = nil
+				m.status = "canceled"
+			}
+			return m, nil
+		}
 		switch msg.String() {
 		case "h", "left":
 			m.pane = 0
@@ -124,9 +138,12 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 				m.loadErr = ""
 				return m, loadCmd(m.prov)
 			}
+			m.fleet = wrappers.List() // rescan wrapper specs too
+			m.status = "wrappers rescanned"
 		case "enter":
 			if m.pane == 0 {
-				if m.sources()[m.selL].kind == srcModels {
+				src := m.sources()[m.selL]
+				if src.kind == srcModels {
 					if len(m.model) > 0 {
 						m.pane = 1
 					} else if m.prov != nil {
@@ -135,6 +152,15 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 							return m, loadCmd(m.prov)
 						}
 						m.wantR = true // list on the way — enter it when it lands
+					}
+					return m, nil
+				}
+				// wrapper: confirm-gated docker spawn
+				for i := range m.fleet {
+					if m.fleet[i].Name == src.name {
+						m.status = ""
+						m.pending = &m.fleet[i]
+						return m, nil
 					}
 				}
 				return m, nil
@@ -147,7 +173,7 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 			}
 		}
 		if m.pane == 0 {
-			if n, ok := tabs.MoveSel(m.selL, len(sources), msg); ok {
+			if n, ok := tabs.MoveSel(m.selL, len(m.sources()), msg); ok {
 				m.selL = n
 			}
 		} else if n, ok := tabs.MoveSel(m.selR, len(m.model), msg); ok {
@@ -158,8 +184,21 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 }
 
 // sources exists so the slice is addressable per-selection.
-func (m *Model) sources() []source { return sources }
-func (m *Model) Resize(w, h int)   { m.w, m.h = w, h }
+func (m *Model) sources() []source {
+	out := []source{{"ollama", "live models on demo-desktop · enter spawns a chat session", srcModels}}
+	for _, w := range m.fleet {
+		d := w.Desc
+		if d == "" {
+			d = "docker wrapper"
+		}
+		if w.Image == "" {
+			d += " · image not set"
+		}
+		out = append(out, source{w.Name, d, srcWrapper})
+	}
+	return out
+}
+func (m *Model) Resize(w, h int) { m.w, m.h = w, h }
 func (m *Model) box(focused bool) lipgloss.Style {
 	b := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -172,7 +211,7 @@ func (m *Model) box(focused bool) lipgloss.Style {
 }
 func (m *Model) leftCol() string {
 	var rows []string
-	for i, s := range sources {
+	for i, s := range m.sources() {
 		marker := "  "
 		label := s.name
 		switch {
@@ -187,13 +226,19 @@ func (m *Model) leftCol() string {
 	return m.box(m.pane == 0).Render(strings.Join(rows, "\n"))
 }
 func (m *Model) rightCol() string {
-	sel := sources[m.selL]
+	sel := m.sources()[m.selL]
 	var body string
 	switch sel.kind {
 	case srcWrapper:
+		w, ok := wrappers.Get(sel.name)
+		cmd := wrappers.Summary(w)
+		if !ok {
+			cmd = "spec not found"
+		}
 		body = m.th.Accent().Render(sel.name) + "\n" +
 			m.th.Secondary().Render(sel.desc) + "\n\n" +
-			m.th.Muted().Render("runs in docker · worker layer coming\n(you'll launch it here — confirm-gated)")
+			m.th.Muted().Render("runs in docker · confirm-gated") + "\n" +
+			m.th.Muted().Render(tabs.Trunc(cmd, m.w/2))
 	default:
 		switch {
 		case m.loading:
@@ -240,6 +285,52 @@ func (m *Model) View() string {
 	if m.spawned > 0 {
 		hint = fmt.Sprintf("%s · %d spawned this visit", hint, m.spawned)
 	}
+	if m.status != "" {
+		hint += " · " + m.status
+	}
 	body := lipgloss.JoinHorizontal(lipgloss.Top, m.leftCol(), "  ", m.rightCol())
-	return m.th.Secondary().Render("launcher") + "  " + m.th.Muted().Render(hint) + "\n" + body
+	out := m.th.Secondary().Render("launcher") + "  " + m.th.Muted().Render(hint) + "\n" + body
+	if m.pending != nil {
+		out = m.confirmOverlay(out)
+	}
+	return out
+}
+
+// confirmOverlay draws the y/n docker gate centered over the launcher.
+func (m *Model) confirmOverlay(body string) string {
+	rows := []string{
+		m.th.TabActive().Render(" RUN IN DOCKER? "),
+		"",
+		m.th.Accent().Render(m.pending.Name),
+		m.th.Muted().Render(tabs.Trunc(wrappers.Summary(*m.pending), 56)),
+		"",
+		m.th.Muted().Render("y run · n cancel"),
+	}
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.th.AccentColor()).
+		Padding(1, 3).
+		Render(strings.Join(rows, "\n"))
+
+	bw := lipgloss.Width(box)
+	bh := lipgloss.Height(box)
+	lines := strings.Split(body, "\n")
+	top := max(0, (m.h-bh)/2)
+	left := max(0, (m.w-bw)/2)
+	for y := 0; y < bh && top+y < len(lines); y++ {
+		row := lines[top+y]
+		pad := left
+		if pad > len(row) {
+			pad = len(row)
+		}
+		lines[top+y] = row[:pad] + strings.SplitN(box, "\n", bh)[y]
+	}
+	return strings.Join(lines, "\n")
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

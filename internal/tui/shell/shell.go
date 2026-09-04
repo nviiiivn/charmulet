@@ -60,11 +60,15 @@ func (m *Model) spawn(t tabs.Tab) tea.Cmd {
 	return tea.Batch(t.Init(), t.Activate())
 }
 
-// close removes the active tab unless it is core. Returns focus cmd.
+// close removes the active tab unless it is core. Tabs with running
+// background work (docker containers) get an OnClose stop hook first.
 func (m *Model) close() {
 	if m.core[m.Active().ID()] {
 		m.status = "core tabs can't be closed"
 		return
+	}
+	if c, ok := m.Active().(interface{ OnClose() }); ok {
+		c.OnClose()
 	}
 	m.Active().Deactivate()
 	m.tabs = append(m.tabs[:m.active], m.tabs[m.active+1:]...)
