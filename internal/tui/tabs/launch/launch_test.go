@@ -29,7 +29,7 @@ func key(s string) tea.KeyPressMsg {
 
 func TestPaneSwitchAndSpawn(t *testing.T) {
 	th := theme.Default()
-	m := New(th, fakeProv{})
+	m := New(th, fakeProv{}, nil)
 
 	// Activate kicks off the model load; execute cmd and feed msg back.
 	cmd := m.Activate()
@@ -77,7 +77,7 @@ func TestPaneSwitchAndSpawn(t *testing.T) {
 }
 
 func TestEnterWhileLoadingQueuesPaneHop(t *testing.T) {
-	m := New(theme.Default(), fakeProv{})
+	m := New(theme.Default(), fakeProv{}, nil)
 	m.loading = true // load in flight
 	m.Update(key("enter"))
 	if m.wantR != true {

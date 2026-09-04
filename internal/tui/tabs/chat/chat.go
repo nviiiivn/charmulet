@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/nvii/charmulet/internal/core/provider"
+	"github.com/nvii/charmulet/internal/core/session"
 	"github.com/nvii/charmulet/internal/tui/tabs"
 	"github.com/nvii/charmulet/internal/tui/theme"
 )
@@ -40,6 +41,9 @@ type Model struct {
 	pending   string // user text of the in-flight turn
 
 	title string // tab-bar label; "CHAT" for the default session
+
+	st  *session.Store // nil = ephemeral, nothing persisted
+	sid int64          // 0 = not backed by a store row
 }
 
 var _ tabs.Tab = (*Model)(nil)
@@ -49,9 +53,38 @@ func New(th theme.Theme, prov provider.Provider, model string) *Model {
 }
 
 // NewSession creates a spawned chat tab with a model-derived title
-// (used by the launcher for parallel sessions).
-func NewSession(th theme.Theme, prov provider.Provider, model string) *Model {
-	return newModel(th, prov, model, sessionTitle(model))
+// (used by the launcher for parallel sessions). A non-nil store backs it
+// with a persisted session row.
+func NewSession(th theme.Theme, prov provider.Provider, model string, st *session.Store) *Model {
+	m := newModel(th, prov, model, sessionTitle(model))
+	if st != nil {
+		if meta, err := st.Create(m.title, model); err == nil {
+			m.st, m.sid = st, meta.ID
+		}
+	}
+	return m
+}
+
+// NewResume reopens a persisted session with its transcript preloaded;
+// further turns keep appending to the same row.
+func NewResume(th theme.Theme, prov provider.Provider, st *session.Store, meta session.SessionMeta, msgs []session.Message) *Model {
+	m := newModel(th, prov, meta.Model, meta.Title)
+	if st != nil && meta.ID != 0 {
+		m.st, m.sid = st, meta.ID
+	}
+	for _, msg := range msgs {
+		m.hist = append(m.hist, provider.Message{Role: msg.Role, Content: msg.Content})
+		switch msg.Role {
+		case "user":
+			m.log = append(m.log, th.TabActive().Render(" you ")+" "+msg.Content)
+		case "assistant":
+			m.log = append(m.log, th.Accent().Render(" charm ")+" "+msg.Content, "")
+		}
+	}
+	if len(m.log) > 0 && m.log[len(m.log)-1] == "" {
+		m.log = m.log[:len(m.log)-1]
+	}
+	return m
 }
 
 func newModel(th theme.Theme, prov provider.Provider, model, title string) *Model {
@@ -130,6 +163,7 @@ func (m *Model) start(userText string) tea.Cmd {
 	m.streaming = true
 	m.buf.Reset()
 	m.pending = userText
+	_ = m.st.Append(m.sid, "user", userText) // best-effort; nil store no-ops
 
 	s, err := m.prov.Complete(ctx, m.model, msgs)
 	if err != nil {
@@ -178,6 +212,7 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 		m.hist = append(m.hist, provider.Message{Role: "user", Content: m.pending})
 		if text != "" {
 			m.hist = append(m.hist, provider.Message{Role: "assistant", Content: text})
+			_ = m.st.Append(m.sid, "assistant", text)
 		}
 		m.pending = ""
 		m.streaming = false

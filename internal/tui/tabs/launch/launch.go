@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/nvii/charmulet/internal/core/provider"
+	"github.com/nvii/charmulet/internal/core/session"
 	"github.com/nvii/charmulet/internal/tui/tabs"
 	"github.com/nvii/charmulet/internal/tui/tabs/chat"
 	"github.com/nvii/charmulet/internal/tui/theme"
@@ -52,6 +53,7 @@ type modelsMsg struct {
 type Model struct {
 	th   theme.Theme
 	prov provider.Provider
+	st   *session.Store
 	w, h int
 
 	pane  int // 0 = sources, 1 = detail
@@ -68,8 +70,8 @@ type Model struct {
 
 var _ tabs.Tab = (*Model)(nil)
 
-func New(th theme.Theme, prov provider.Provider) *Model {
-	return &Model{th: th, prov: prov}
+func New(th theme.Theme, prov provider.Provider, st *session.Store) *Model {
+	return &Model{th: th, prov: prov, st: st}
 }
 
 func (m *Model) Title() string { return "LAUNCH" }
@@ -158,7 +160,7 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 			if len(m.model) > 0 {
 				model := m.model[m.selR]
 				m.spawned++
-				np := chat.NewSession(m.th, m.prov, model)
+				np := chat.NewSession(m.th, m.prov, model, m.st)
 				return m, func() tea.Msg { return tabs.SpawnMsg{Tab: np} }
 			}
 		}
