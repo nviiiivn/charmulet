@@ -185,6 +185,10 @@ func (m *Model) Esc() bool {
 		m.cancel()
 		return true
 	}
+	// a half-typed draft is precious — esc must not do anything destructive
+	if m.ta.Value() != "" {
+		return true
+	}
 	return false
 }
 
@@ -245,10 +249,12 @@ func (m *Model) start(userText string) tea.Cmd {
 
 func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 	var cmds []tea.Cmd
+	dirty := false // transcript state changed → needs a re-render
 
 	switch msg := msg.(type) {
 	case tabs.SetThemeMsg:
 		m.th = msg.Theme
+		m.repaint() // restyle transcript immediately
 		return m, nil
 
 	case tea.KeyPressMsg:
@@ -261,8 +267,12 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 				)
 				m.ta.Reset()
 				cmds = append(cmds, m.start(val))
+				dirty = true
 			}
 		}
+		// Plain typing only moves the textarea cursor — View() renders
+		// it live, so no transcript repaint needed (perf: O(transcript)
+		// re-wrap per keystroke avoided).
 
 	case tokenMsg:
 		if msg.id != m.id {
@@ -276,15 +286,14 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 		}
 		// Deferred repaint: the flush tick below materializes the buffer,
 		// so a burst of tokens costs one re-wrap, not one per chunk.
-		var cmd tea.Cmd
-		m.ta, cmd = m.ta.Update(msg)
-		return m, tea.Batch(append(cmds, cmd)...)
+		return m, tea.Batch(cmds...)
 
 	case flushMsg:
 		if msg.id != m.id {
 			return m, nil
 		}
 		m.flushing = false
+		dirty = true // materialize the streamed tail
 
 	case streamDoneMsg:
 		if msg.id != m.id {
@@ -309,6 +318,7 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 			m.cancel()
 			m.cancel = nil
 		}
+		dirty = true
 
 	case errMsg:
 		if msg.id != m.id {
@@ -316,13 +326,16 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 		}
 		m.log = append(m.log, m.th.TabActive().Render(" err ")+msg.err.Error(), "")
 		m.streaming = false
+		dirty = true
 	}
 
 	var cmd tea.Cmd
 	m.ta, cmd = m.ta.Update(msg)
 	cmds = append(cmds, cmd)
 
-	m.repaint()
+	if dirty {
+		m.repaint()
+	}
 	return m, tea.Batch(cmds...)
 }
 

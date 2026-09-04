@@ -22,14 +22,15 @@ const (
 )
 
 type Model struct {
-	tabs   []tabs.Tab
-	core   map[string]bool // tab IDs that cannot be closed (ctrl+w)
-	active int
-	w, h   int
-	th     theme.Theme
-	status string // transient message line (errors etc.)
-	help   bool   // help overlay screen
-	splash bool   // intro splash screen (dismiss: any key or timer)
+	tabs        []tabs.Tab
+	core        map[string]bool // tab IDs that cannot be closed (ctrl+w)
+	active      int
+	w, h        int
+	th          theme.Theme
+	status      string // transient message line (errors etc.)
+	help        bool   // help overlay screen
+	splash      bool   // intro splash screen (dismiss: any key or timer)
+	confirmQuit bool   // ctrl+q / ctrl+c gate: y quits, anything else stays
 }
 
 var _ tea.Model = (*Model)(nil)
@@ -102,20 +103,28 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.splash = false
 			return m, nil // swallow the dismissing key
 		}
+		if m.confirmQuit {
+			switch msg.String() {
+			case "y", "Y", "enter":
+				return m, tea.Quit
+			default:
+				m.confirmQuit = false
+				return m, nil // any other key stays
+			}
+		}
 		switch msg.String() {
-		case "ctrl+c":
-			return m, tea.Quit
+		case "ctrl+c", "ctrl+q":
+			m.confirmQuit = true
+			return m, nil
 		case "esc":
 			if m.help {
 				m.help = false
 				return m, nil
 			}
-			// the active tab gets first claim (cancel stream, close
-			// overlay/viewer); quit only when nobody wants it
-			if m.Active().Esc() {
-				return m, nil
-			}
-			return m, tea.Quit
+			// esc backs out of the active thing (cancel stream,
+			// close viewer/overlay); it NEVER quits the app
+			m.Active().Esc()
+			return m, nil
 		case "?":
 			m.help = !m.help
 			return m, nil
@@ -194,7 +203,8 @@ func (m *Model) overlay(body string) string {
 	rows := []string{
 		m.th.TabActive().Render(" CHARMULET "),
 		"",
-		m.th.Accent().Render("tabs") + "     tab / shift+tab cycle · 1-9 jump · ctrl+w close spawned · esc backs out, then quits",
+		m.th.Accent().Render("tabs") + "     tab / shift+tab cycle · 1-9 jump · ctrl+w close spawned",
+		m.th.Accent().Render("quit") + "     ctrl+q (asks first) · esc backs out, never quits",
 		m.th.Accent().Render("chat") + "     enter send · esc cancel stream",
 		m.th.Accent().Render("launch") + "   pick model → spawns a parallel chat session",
 		m.th.Accent().Render("sessions") + " resume past conversations · enter reopen",
@@ -234,6 +244,36 @@ func (m *Model) overlay(body string) string {
 }
 
 func boxLines(box string) []string { return strings.Split(box, "\n") }
+
+// quitOverlay asks for confirmation before quitting so no session or draft
+// is lost to a stray ctrl+q / ctrl+c.
+func (m *Model) quitOverlay(body string) string {
+	rows := []string{
+		m.th.TabActive().Render(" QUIT CHARMULET? "),
+		"",
+		m.th.Accent().Render("y") + " quit · " + m.th.Secondary().Render("any other key stays"),
+	}
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.th.AccentColor()).
+		Padding(1, 3).
+		Render(strings.Join(rows, "\n"))
+
+	bw := lipgloss.Width(box)
+	bh := lipgloss.Height(box)
+	lines := strings.Split(body, "\n")
+	top := max(0, (m.h-bh)/2)
+	left := max(0, (m.w-bw)/2)
+	for y := 0; y < bh && top+y < len(lines); y++ {
+		ln := lines[top+y]
+		pad := left
+		if short := m.w - lipgloss.Width(ln); short < pad {
+			pad = max(0, short)
+		}
+		lines[top+y] = ln + strings.Repeat(" ", pad) + boxLines(box)[y]
+	}
+	return strings.Join(lines, "\n")
+}
 
 // splashView renders the intro: the word charmulet in cycling pride colors.
 func (m *Model) splashView() string {
@@ -310,6 +350,9 @@ func (m *Model) View() tea.View {
 
 	if m.help {
 		body = m.overlay(body)
+	}
+	if m.confirmQuit {
+		body = m.quitOverlay(body)
 	}
 
 	// --- status bar ---

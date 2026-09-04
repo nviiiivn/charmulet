@@ -148,7 +148,7 @@ func TestTabMsgRoutesToOwnerNotFocus(t *testing.T) {
 	}
 }
 
-func TestEscConsumeThenQuit(t *testing.T) {
+func TestEscNeverQuits(t *testing.T) {
 	m, fs := newShell(&fake{id: "a", esc: true})
 
 	// tab consumes esc: no quit
@@ -160,11 +160,53 @@ func TestEscConsumeThenQuit(t *testing.T) {
 		t.Fatal("tab never offered esc")
 	}
 
-	// tab declines esc: shell quits
+	// tab declines esc: still NO quit — esc only backs out
 	fs[0].esc = false
 	_, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if cmd != nil {
+		t.Fatal("declined esc must never quit")
+	}
+}
+
+func TestQuitConfirmGate(t *testing.T) {
+	m, _ := newShell(&fake{id: "a"})
+
+	// ctrl+q opens the confirm overlay, does not quit yet
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Mod: tea.ModCtrl})
+	if cmd != nil || !m.confirmQuit {
+		t.Fatalf("ctrl+q should arm confirm, cmd=%v armed=%v", cmd, m.confirmQuit)
+	}
+
+	// any non-y key cancels
+	_, cmd = m.Update(tea.KeyPressMsg{Code: 'n'})
+	if cmd != nil || m.confirmQuit {
+		t.Fatal("n must cancel the quit gate")
+	}
+
+	// ctrl+c arms the same gate
+	_, cmd = m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	if cmd != nil || !m.confirmQuit {
+		t.Fatal("ctrl+c should arm confirm")
+	}
+
+	// esc inside the gate cancels (does not leak to tabs)
+	_, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if cmd != nil || m.confirmQuit {
+		t.Fatal("esc must cancel the quit gate")
+	}
+
+	// y after ctrl+q quits
+	_, _ = m.Update(tea.KeyPressMsg{Code: 'q', Mod: tea.ModCtrl})
+	_, cmd = m.Update(tea.KeyPressMsg{Code: 'y'})
 	if cmd == nil {
-		t.Fatal("declined esc must quit")
+		t.Fatal("y must quit")
+	}
+
+	// enter also quits once armed
+	m.confirmQuit = true
+	_, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("enter must quit when armed")
 	}
 }
 
@@ -181,9 +223,12 @@ func TestSplashSwallowsFirstKey(t *testing.T) {
 		t.Fatalf("splash dismissal leaked to tab: %v %v", fs[0].gotMsgs, fs[0].trace)
 	}
 
-	// next esc follows the normal path (quit when declined)
+	// next esc follows the normal path — offered to the tab, never quits
 	_, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if cmd == nil {
-		t.Fatal("esc after splash should quit")
+	if cmd != nil {
+		t.Fatal("esc after splash must never quit")
+	}
+	if !contains(fs[0].trace, "esc") {
+		t.Fatal("esc after splash never reached the tab")
 	}
 }

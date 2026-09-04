@@ -43,7 +43,8 @@ resumes the newest session. No match → notice + fresh chat.
 | 9 | SETTINGS | live theme switch, zero restart |
 
 Global keys: `tab`/`shift+tab` cycle · `1`-`9` jump · `ctrl+w` close spawned
-tab · `?` help · `esc` backs out (cancel/close), then quits · `ctrl+c` quits.
+tab · `?` help · `esc` backs out (cancel/close) and never quits · `ctrl+q`
+or `ctrl+c` asks "quit?" first (`y` quits, any other key stays).
 
 ## Configuration
 

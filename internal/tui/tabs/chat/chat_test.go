@@ -1,6 +1,12 @@
 package chat
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/nvii/charmulet/internal/tui/tabs"
+	"github.com/nvii/charmulet/internal/tui/theme"
+)
 
 func TestSessionTitle(t *testing.T) {
 	cases := map[string]string{
@@ -12,5 +18,35 @@ func TestSessionTitle(t *testing.T) {
 		if got := sessionTitle(in); got != want {
 			t.Errorf("sessionTitle(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// TestTokenBatchesUntilFlush pins the 30ms coalescing: a token must NOT
+// repaint the transcript; the flush tick materializes the whole tail once.
+func TestTokenBatchesUntilFlush(t *testing.T) {
+	m := New(theme.Default(), nil, "test")
+	m.Resize(80, 24)
+	m.streaming = true
+
+	tab, cmd := m.Update(tokenMsg{id: m.id, text: "hello"})
+	if tab != tabs.Tab(m) {
+		t.Fatal("update must return the same tab")
+	}
+	if cmd == nil {
+		t.Fatal("token must arm pump (+flush)")
+	}
+	if got := m.vp.View(); strings.Contains(got, "hello") {
+		t.Fatal("token repaint leaked before flush tick")
+	}
+
+	_, _ = m.Update(flushMsg{id: m.id})
+	if got := m.vp.View(); !strings.Contains(got, "hello") {
+		t.Fatal("flush must materialize the streamed tail")
+	}
+
+	// foreign session ids are ignored entirely
+	_, _ = m.Update(tokenMsg{id: "other", text: "x"})
+	if strings.Contains(m.buf.String(), "x") {
+		t.Fatal("foreign token leaked into buffer")
 	}
 }

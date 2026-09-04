@@ -75,7 +75,7 @@ func (m *Model) Deactivate()       {}
 // Esc cancels every in-flight run while in results mode.
 func (m *Model) Esc() bool {
 	if m.inputMode {
-		return false
+		return true // composing a prompt — esc does nothing destructive
 	}
 	for _, rm := range m.models {
 		if rm.streaming && rm.cancel != nil {
@@ -218,7 +218,7 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 		m.flushing = false
 	}
 
-	m.repaint(nil)
+	m.repaint()
 	return m, nil
 }
 
@@ -229,12 +229,12 @@ func (m *Model) updateKeys(msg tea.KeyPressMsg) (tabs.Tab, tea.Cmd) {
 		case "enter":
 			if strings.TrimSpace(m.promptTA.Value()) != "" {
 				cmd := m.start()
-				m.repaint(nil)
+				m.repaint()
 				return m, cmd
 			}
 		case "tab":
 			m.inputMode = false
-			m.repaint(nil)
+			m.repaint()
 			return m, nil
 		}
 		var cmd tea.Cmd
@@ -251,7 +251,7 @@ func (m *Model) updateKeys(msg tea.KeyPressMsg) (tabs.Tab, tea.Cmd) {
 		m.fuse()
 	}
 	if m.inputMode {
-		m.repaint(nil)
+		m.repaint()
 		return m, nil
 	}
 
@@ -307,7 +307,7 @@ func (m *Model) applyRunMsg(model string, apply func(*runModel) tea.Cmd, isChunk
 		return m, cmd
 	}
 	m.checkAllDone()
-	m.repaint(nil)
+	m.repaint()
 	return m, cmd
 }
 
@@ -322,7 +322,7 @@ func (m *Model) checkAllDone() {
 
 // repaint pushes rendered content into the viewport; chunkCmds can arm a
 // flush tick so bursts of chunks repaint once per interval.
-func (m *Model) repaint(_ tea.Cmd) {
+func (m *Model) repaint() {
 	m.vp.SetContent(m.render())
 }
 
