@@ -15,7 +15,7 @@ go build ./cmd/charmulet && ./charmulet
 
 ## CLI
 
-```
+```sh
 charmulet                    # launch the TUI
 charmulet run                # same thing (alias)
 charmulet -v                 # version
@@ -31,9 +31,9 @@ resumes the newest session. No match → notice + fresh chat.
 ## Tabs
 
 | # | Tab | What it does |
-|---|-----|--------------|
-| 1 | CHAT | stream completions from demo-desktop ollama · `enter` send · `esc` cancel |
-| 2 | FILES | file browser + markdown viewer (glamour) · `enter` open · `esc`/`q` back |
+| --- | --- | --- |
+| 1 | CHAT | demo-desktop ollama chat · `enter` send · `esc` cancel |
+| 2 | FILES | browser + markdown viewer · `enter` open · `esc` back |
 | 3 | RUNS | fan one prompt to many models · `p` pick longest · `f` fuse |
 | 4 | SERVICES | live homelab cards from dashbored (cpu/mem/disk/GPU/services) |
 | 5 | FRONTS | up/down checks for public fronts + local services |
@@ -58,7 +58,7 @@ Files:
 
 - `~/.config/charmulet/charmulet.toml` — theme, ollama url, chat model
 - `~/.config/charmulet/agents/*.toml` — agent definitions
-- `~/.config/charmulet/skills/*.md` — lazyskills (disable: `touch x.md.disabled`-style rename)
+- `~/.config/charmulet/skills/*.md` — lazyskills (rename to `.md.disabled` to disable)
 - `themes/*.toml` — palettes (default: `pride`)
 
 Sessions persist in SQLite (pure-Go driver, no CGO) and survive restarts.
