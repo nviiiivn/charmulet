@@ -155,6 +155,7 @@ func (m *Model) overlay(body string) string {
 		m.th.Accent().Render("chat") + "     enter send · esc cancel stream",
 		m.th.Accent().Render("launch") + "   pick model → spawns a parallel chat session",
 		m.th.Accent().Render("sessions") + " resume past conversations · enter reopen",
+		m.th.Accent().Render("agents") + "   edit agent TOML · skills on/off · n new",
 		m.th.Accent().Render("runs") + "     fan-out prompt to many models",
 		m.th.Accent().Render("files") + "    j/k move · enter open · r refresh",
 		m.th.Accent().Render("viewer") + "  esc/q close file",

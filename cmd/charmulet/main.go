@@ -17,6 +17,7 @@ import (
 	"github.com/nvii/charmulet/internal/providers/ollama"
 	"github.com/nvii/charmulet/internal/tui/shell"
 	"github.com/nvii/charmulet/internal/tui/tabs"
+	"github.com/nvii/charmulet/internal/tui/tabs/agents"
 	"github.com/nvii/charmulet/internal/tui/tabs/chat"
 	filestabs "github.com/nvii/charmulet/internal/tui/tabs/files"
 	frontstabs "github.com/nvii/charmulet/internal/tui/tabs/fronts"
@@ -108,6 +109,7 @@ func runTUI(themeName, resumeQuery string) error {
 		frontstabs.New(th),
 		launchtabs.New(th, prov, st),
 		sessionstabs.New(th, prov, st),
+		agents.New(th),
 	)
 
 	p := tea.NewProgram(shell.New(th, initial...))
@@ -142,7 +144,7 @@ func main() {
 
 	root.AddCommand(run)
 	ctx := context.Background()
-	if err := fang.Execute(ctx, root); err != nil {
+	if err := fang.Execute(ctx, root, fang.WithVersion(root.Version)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
