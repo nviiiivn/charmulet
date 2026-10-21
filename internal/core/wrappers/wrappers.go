@@ -38,10 +38,10 @@ func builtin() []Wrapper {
 		{Name: "claude", Desc: "claude code CLI", Interactive: true},
 		{Name: "codex", Desc: "openai codex CLI", Interactive: true},
 		{Name: "opencode", Desc: "opencode agent CLI", Interactive: true},
-		{Name: "hermes", Desc: "hermes agent (+server on demo-desktop)", Interactive: true},
+		{Name: "hermes", Desc: "hermes agent", Interactive: true},
 		{Name: "openclaw", Desc: "openclaw gateway agent", Interactive: true},
 		{Name: "agent-zero", Desc: "agent-zero framework", Interactive: true},
-		{Name: "totem", Desc: "totem CLI (config-only on demo-server)", Interactive: true},
+		{Name: "totem", Desc: "totem CLI", Interactive: true},
 	}
 }
 

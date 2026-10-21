@@ -89,7 +89,7 @@ func Load() (*Config, error) {
 		if v := os.Getenv("CHARMULET_OLLAMA_URL"); v != "" {
 			cfg.OllamaURL = v
 		} else {
-			cfg.OllamaURL = "http://192.0.2.24:11434"
+			cfg.OllamaURL = "http://localhost:11434"
 		}
 	}
 	if cfg.ChatModel == "" {

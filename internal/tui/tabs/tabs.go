@@ -5,7 +5,7 @@ package tabs
 
 import tea "charm.land/bubbletea/v2"
 
-import "github.com/nvii/charmulet/internal/tui/theme"
+import "github.com/nviiiivn/charmulet/internal/tui/theme"
 
 type Tab interface {
 	// Title returns the label shown in the tab bar.
@@ -24,6 +24,13 @@ type Tab interface {
 	// viewer. Returns true when consumed; the shell only quits on esc when
 	// no tab consumes it.
 	Esc() bool
+}
+
+// Typer is implemented by tabs that hold a text box. While Typing() is true
+// the shell hands printable keys (digits, "?") to the tab as text instead of
+// reading them as tab-jump / help shortcuts; tab, esc and ctrl keys still work.
+type Typer interface {
+	Typing() bool
 }
 
 // TabMsg is a message that belongs to one tab; the shell routes it to the

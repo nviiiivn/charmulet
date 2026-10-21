@@ -12,8 +12,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/nvii/charmulet/internal/tui/tabs"
-	"github.com/nvii/charmulet/internal/tui/theme"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs"
+	"github.com/nviiiivn/charmulet/internal/tui/theme"
 )
 
 const (
@@ -52,6 +52,13 @@ func splashCmd() tea.Cmd {
 func (m *Model) Active() tabs.Tab { return m.tabs[m.active] }
 
 // spawn appends a tab, focuses it, and returns the cmds to run.
+// typing reports whether msg is printable text for the active tab's text box
+// (see tabs.Typer), which must reach the tab instead of firing a shortcut.
+func (m *Model) typing(msg tea.KeyPressMsg) bool {
+	t, ok := m.Active().(tabs.Typer)
+	return ok && t.Typing() && msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0
+}
+
 func (m *Model) spawn(t tabs.Tab) tea.Cmd {
 	m.Active().Deactivate()
 	m.tabs = append(m.tabs, t)
@@ -116,6 +123,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil // any other key stays
 			}
 		}
+		typing := m.typing(msg)
 		switch msg.String() {
 		case "ctrl+c", "ctrl+q":
 			m.confirmQuit = true
@@ -130,6 +138,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Active().Esc()
 			return m, nil
 		case "?":
+			if typing {
+				break // a "?" typed into a text box is text
+			}
 			m.help = !m.help
 			return m, nil
 		}
@@ -149,6 +160,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.close()
 			return m, m.Active().Activate()
 		default:
+			if typing {
+				break // digits typed into a text box are text, not tab jumps
+			}
 			// number keys 1-9 jump straight to a tab; 0 jumps to tab 10
 			if len(msg.String()) == 1 && msg.String()[0] >= '1' && msg.String()[0] <= '9' {
 				idx := int(msg.String()[0] - '1')

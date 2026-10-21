@@ -9,12 +9,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/nvii/charmulet/internal/core/provider"
-	"github.com/nvii/charmulet/internal/core/wrappers"
-	"github.com/nvii/charmulet/internal/tui/tabs"
-	"github.com/nvii/charmulet/internal/tui/tabs/chat"
-	"github.com/nvii/charmulet/internal/tui/tabs/wrap"
-	"github.com/nvii/charmulet/internal/tui/theme"
+	"github.com/nviiiivn/charmulet/internal/core/provider"
+	"github.com/nviiiivn/charmulet/internal/core/wrappers"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs/chat"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs/wrap"
+	"github.com/nviiiivn/charmulet/internal/tui/theme"
 )
 
 // fakeDockerScript masquerades as docker for the confirm-gate spawn test.

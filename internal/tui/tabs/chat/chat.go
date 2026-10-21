@@ -17,10 +17,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/nvii/charmulet/internal/core/provider"
-	"github.com/nvii/charmulet/internal/core/session"
-	"github.com/nvii/charmulet/internal/tui/tabs"
-	"github.com/nvii/charmulet/internal/tui/theme"
+	"github.com/nviiiivn/charmulet/internal/core/provider"
+	"github.com/nviiiivn/charmulet/internal/core/session"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs"
+	"github.com/nviiiivn/charmulet/internal/tui/theme"
 )
 
 // flushInterval coalesces streamed tokens into one repaint per tick so a
@@ -152,6 +152,7 @@ func newModel(th theme.Theme, prov provider.Provider, model, title string) *Mode
 	}
 	m.ta = textarea.New()
 	m.ta.Placeholder = "say something… (enter to send, esc to cancel)"
+	m.ta.Focus() // an unfocused bubbles textarea drops every key
 	if prov != nil {
 		m.log = []string{m.th.Secondary().Render("charmulet chat — " + prov.Name() + " · " + model), ""}
 	} else {
@@ -302,7 +303,8 @@ func (m *Model) start(userText string) tea.Cmd {
 
 func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 	var cmds []tea.Cmd
-	dirty := false // transcript state changed → needs a re-render
+	dirty := false    // transcript state changed → needs a re-render
+	consumed := false // key fully handled; keep it out of the textarea
 
 	switch msg := msg.(type) {
 	case tabs.SetThemeMsg:
@@ -316,6 +318,7 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 		}
 		switch msg.String() {
 		case "enter":
+			consumed = true // enter sends; it never adds a line to the box
 			val := strings.TrimSpace(m.ta.Value())
 			if val != "" && !m.streaming && m.prov != nil {
 				m.log = append(m.log,
@@ -325,12 +328,12 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 				cmds = append(cmds, m.start(val))
 				dirty = true
 			}
-		case "i":
+		case "ctrl+r":
 			if !m.streaming {
 				m.renaming = true
 				m.renameBuf = m.title
 			}
-		case "e":
+		case "ctrl+e":
 			cmds = append(cmds, m.exportCmd())
 		}
 		// Plain typing only moves the textarea cursor — View() renders
@@ -403,9 +406,11 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 		dirty = true
 	}
 
-	var cmd tea.Cmd
-	m.ta, cmd = m.ta.Update(msg)
-	cmds = append(cmds, cmd)
+	if !consumed {
+		var cmd tea.Cmd
+		m.ta, cmd = m.ta.Update(msg)
+		cmds = append(cmds, cmd)
+	}
 
 	if dirty {
 		m.repaint()
@@ -497,9 +502,16 @@ func (m *Model) View() string {
 		}
 		return m.vp.View() + "\n" + bar + "\n" + input
 	}
-	hint := m.th.Muted().Render(" enter send · esc cancel · i rename · e export")
+	hint := m.th.Muted().Render(" enter send · esc cancel · ctrl+r rename · ctrl+e export")
 	if pad := m.w - lipgloss.Width(hint); pad > 0 {
 		hint += strings.Repeat(" ", pad)
 	}
 	return m.vp.View() + "\n" + input + "\n" + hint
+}
+
+// Typing is true while there is text in the box or the title editor is open,
+// so digits and "?" land in the message. With an empty box, 1-9 still jump
+// tabs and "?" still opens help.
+func (m *Model) Typing() bool {
+	return m.renaming || strings.TrimSpace(m.ta.Value()) != ""
 }

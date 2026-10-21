@@ -7,9 +7,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/nvii/charmulet/internal/core/config"
-	"github.com/nvii/charmulet/internal/tui/tabs"
-	"github.com/nvii/charmulet/internal/tui/theme"
+	"github.com/nviiiivn/charmulet/internal/core/config"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs"
+	"github.com/nviiiivn/charmulet/internal/tui/theme"
 )
 
 // TestApplyThemeLiveAndPersisted: enter on a selected theme emits

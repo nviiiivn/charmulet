@@ -12,10 +12,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/nvii/charmulet/internal/homelab"
-	dashpages "github.com/nvii/charmulet/internal/pages"
-	"github.com/nvii/charmulet/internal/tui/tabs"
-	"github.com/nvii/charmulet/internal/tui/theme"
+	"github.com/nviiiivn/charmulet/internal/homelab"
+	dashpages "github.com/nviiiivn/charmulet/internal/pages"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs"
+	"github.com/nviiiivn/charmulet/internal/tui/theme"
 )
 
 const pollEvery = 10 * time.Second

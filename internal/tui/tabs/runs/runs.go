@@ -12,9 +12,9 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/nvii/charmulet/internal/core/provider"
-	"github.com/nvii/charmulet/internal/tui/tabs"
-	"github.com/nvii/charmulet/internal/tui/theme"
+	"github.com/nviiiivn/charmulet/internal/core/provider"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs"
+	"github.com/nviiiivn/charmulet/internal/tui/theme"
 )
 
 // flushInterval coalesces streamed chunks into one repaint per tick.
@@ -53,6 +53,7 @@ func New(th theme.Theme, prov provider.Provider) *Model {
 	m.promptTA = textarea.New()
 	m.promptTA.Placeholder = "prompt to fan out… (enter to run, tab to switch to picker)"
 	m.promptTA.SetHeight(3)
+	m.promptTA.Focus() // an unfocused bubbles textarea drops every key
 	m.vp = viewport.New()
 	m.inputMode = true
 
@@ -232,6 +233,7 @@ func (m *Model) updateKeys(msg tea.KeyPressMsg) (tabs.Tab, tea.Cmd) {
 				m.repaint()
 				return m, cmd
 			}
+			return m, nil // enter runs; it never adds a line to the box
 		case "tab":
 			m.inputMode = false
 			m.repaint()
@@ -375,3 +377,6 @@ func (m *Model) View() string {
 	}
 	return m.vp.View()
 }
+
+// Typing is true while a prompt is being typed (see tabs.Typer).
+func (m *Model) Typing() bool { return m.inputMode && strings.TrimSpace(m.promptTA.Value()) != "" }

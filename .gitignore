@@ -1,4 +1,25 @@
+# build output
 /charmulet
-*.gif
 dist/
-.slim/deepwork/
+*.gif
+!docs/media/*.gif
+
+# your own config, sessions and secrets never go in git
+.charmulet.toml
+*.db
+*.db-journal
+*.sqlite
+data/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# tooling
+.venv/
+venv/
+node_modules/
+__pycache__/
+.playwright-mcp/
+.DS_Store

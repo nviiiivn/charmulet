@@ -76,9 +76,9 @@ func TestFetchHappyPath(t *testing.T) {
 
 func TestOrderedCanonicalThenExtras(t *testing.T) {
 	machines := map[string]Machine{
-		"zeta-extra": {},
-		"demo-laptop":       {},
-		"demo-server":      {},
+		"zeta-extra":  {},
+		"demo-laptop": {},
+		"demo-server": {},
 	}
 	got := Ordered(machines)
 	want := []string{"demo-server", "demo-laptop", "zeta-extra"}

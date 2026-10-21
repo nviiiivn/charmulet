@@ -1,0 +1,11 @@
+# Copy to ~/.config/charmulet/charmulet.toml (or run `charmulet setup`).
+# A .charmulet.toml in the directory you start charmulet from overrides it.
+
+# Palette from themes/<name>.toml. Ships with "pride"; add your own beside it.
+theme = "pride"
+
+# Your ollama server. CHARMULET_OLLAMA_URL is used when this is empty.
+ollama_url = "http://localhost:11434"
+
+# Model the first CHAT tab opens with. Any model your ollama has pulled.
+chat_model = "qwen3.5:9b"

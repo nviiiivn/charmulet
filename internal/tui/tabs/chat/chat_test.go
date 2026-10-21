@@ -7,9 +7,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/nvii/charmulet/internal/core/provider"
-	"github.com/nvii/charmulet/internal/tui/tabs"
-	"github.com/nvii/charmulet/internal/tui/theme"
+	"github.com/nviiiivn/charmulet/internal/core/provider"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs"
+	"github.com/nviiiivn/charmulet/internal/tui/theme"
 )
 
 func TestSessionTitle(t *testing.T) {
@@ -55,14 +55,14 @@ func TestTokenBatchesUntilFlush(t *testing.T) {
 	}
 }
 
-// TestRenameFlow drives the 'i' title editor: enter mode, type, commit,
+// TestRenameFlow drives the ctrl+r title editor: enter mode, type, commit,
 // and esc-cancel restoring nothing.
 func TestRenameFlow(t *testing.T) {
 	m := New(theme.Default(), nil, "test")
 	m.Resize(80, 24)
 
-	if _, _ = m.Update(tea.KeyPressMsg{Code: 'i'}); !m.renaming {
-		t.Fatal("i must open the title editor")
+	if _, _ = m.Update(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl}); !m.renaming {
+		t.Fatal("ctrl+r must open the title editor")
 	}
 	if _, _ = m.Update(tea.KeyPressMsg{Code: 'x', Text: "x"}); m.renameBuf != "CHATx" {
 		t.Fatalf("typed rune must append: %q", m.renameBuf)
@@ -81,7 +81,7 @@ func TestRenameFlow(t *testing.T) {
 	}
 
 	// esc cancels a rename without touching the title
-	m.Update(tea.KeyPressMsg{Code: 'i'})
+	m.Update(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
 	m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if !m.Esc() || m.renaming {
 		t.Fatal("esc must close the editor")
@@ -91,7 +91,7 @@ func TestRenameFlow(t *testing.T) {
 	}
 }
 
-// TestExportWritesMarkdown pins the 'e' export path: file exists, holds the
+// TestExportWritesMarkdown pins the ctrl+e export path: file exists, holds the
 // transcript turns.
 func TestExportWritesMarkdown(t *testing.T) {
 	dir := t.TempDir()
@@ -103,9 +103,9 @@ func TestExportWritesMarkdown(t *testing.T) {
 		provider.Message{Role: "assistant", Content: "general kenobi"},
 	)
 
-	_, cmd := m.Update(tea.KeyPressMsg{Code: 'e'})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
 	if cmd == nil {
-		t.Fatal("e must arm the export cmd")
+		t.Fatal("ctrl+e must arm the export cmd")
 	}
 	msg := cmd()
 	em, ok := msg.(exportedMsg)
@@ -135,5 +135,33 @@ func TestExportWritesMarkdown(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("export flash missing from transcript")
+	}
+}
+
+// TestTypingReachesTheBox pins that plain keys land in the input box, and
+// that "e" and "i" are text, not the export/rename shortcuts.
+func TestTypingReachesTheBox(t *testing.T) {
+	m := New(theme.Default(), nil, "test")
+	m.Resize(80, 24)
+	for _, r := range "hi e3" {
+		if _, cmd := m.Update(tea.KeyPressMsg{Code: r, Text: string(r)}); cmd != nil {
+			if _, ok := cmd().(exportedMsg); ok {
+				t.Fatal("typing e must not export")
+			}
+		}
+	}
+	if m.renaming {
+		t.Fatal("typing i must not open the title editor")
+	}
+	if got := m.ta.Value(); got != "hi e3" {
+		t.Fatalf("box = %q, want %q", got, "hi e3")
+	}
+	if !m.Typing() {
+		t.Fatal("a box with text must report Typing")
+	}
+	// no provider here, so nothing is sent, but enter must not add a line
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if got := m.ta.Value(); got != "hi e3" {
+		t.Fatalf("enter must never insert a newline, box = %q", got)
 	}
 }

@@ -6,9 +6,9 @@ package agents
 import (
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
-	coreagents "github.com/nvii/charmulet/internal/core/agents"
-	"github.com/nvii/charmulet/internal/tui/tabs"
-	"github.com/nvii/charmulet/internal/tui/theme"
+	coreagents "github.com/nviiiivn/charmulet/internal/core/agents"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs"
+	"github.com/nviiiivn/charmulet/internal/tui/theme"
 	"os"
 	"strings"
 )
@@ -259,6 +259,7 @@ func (m *Model) openOverlay(title, body string, md mode) {
 	m.mode = md
 	m.ta.Reset()
 	m.ta.SetValue(body)
+	m.ta.Focus() // an unfocused bubbles textarea drops every key
 	m.status = "editing " + title + " · esc to commit"
 }
 func (m *Model) updateOverlay(msg tea.KeyPressMsg) (tabs.Tab, tea.Cmd) {
@@ -432,4 +433,10 @@ func readFile(p string) string {
 }
 func writeFile(p, body string) error {
 	return os.WriteFile(p, []byte(body), 0o644)
+}
+
+// Typing is true while a field, skill body or skill name is being edited
+// (see tabs.Typer).
+func (m *Model) Typing() bool {
+	return m.mode == modeField || m.mode == modeSkillBody || m.mode == modeSkillName
 }

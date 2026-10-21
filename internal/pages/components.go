@@ -11,7 +11,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/nvii/charmulet/internal/homelab"
+	"github.com/nviiiivn/charmulet/internal/homelab"
 )
 
 // Deps carries everything a component may render from.

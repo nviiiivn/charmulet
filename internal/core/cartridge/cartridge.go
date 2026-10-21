@@ -1,5 +1,5 @@
 // Package cartridge is the per-project RAG engine ("game paks"). Intake,
-// demo-desktop embeddings, and the sqlite-vec index arrive in P3. P0 defines the
+// ollama embeddings, and the sqlite-vec index arrive in P3. P0 defines the
 // manifest shape only — no tui imports allowed here, ever.
 package cartridge
 

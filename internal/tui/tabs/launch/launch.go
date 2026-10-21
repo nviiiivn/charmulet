@@ -10,13 +10,13 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/nvii/charmulet/internal/core/provider"
-	"github.com/nvii/charmulet/internal/core/session"
-	"github.com/nvii/charmulet/internal/core/wrappers"
-	"github.com/nvii/charmulet/internal/tui/tabs"
-	"github.com/nvii/charmulet/internal/tui/tabs/chat"
-	"github.com/nvii/charmulet/internal/tui/tabs/wrap"
-	"github.com/nvii/charmulet/internal/tui/theme"
+	"github.com/nviiiivn/charmulet/internal/core/provider"
+	"github.com/nviiiivn/charmulet/internal/core/session"
+	"github.com/nviiiivn/charmulet/internal/core/wrappers"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs/chat"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs/wrap"
+	"github.com/nviiiivn/charmulet/internal/tui/theme"
 )
 
 type srcKind int
@@ -82,7 +82,7 @@ func loadCmd(prov provider.Provider) tea.Cmd {
 	return func() tea.Msg {
 		ms := prov.Models()
 		if ms == nil {
-			return modelsMsg{err: fmt.Errorf("no models (is demo-desktop ollama up?)")}
+			return modelsMsg{err: fmt.Errorf("no models (is ollama up?)")}
 		}
 		return modelsMsg{models: ms}
 	}
@@ -185,7 +185,7 @@ func (m *Model) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
 
 // sources exists so the slice is addressable per-selection.
 func (m *Model) sources() []source {
-	out := []source{{"ollama", "live models on demo-desktop · enter spawns a chat session", srcModels}}
+	out := []source{{"ollama", "live ollama models · enter spawns a chat session", srcModels}}
 	for _, w := range m.fleet {
 		d := w.Desc
 		if d == "" {

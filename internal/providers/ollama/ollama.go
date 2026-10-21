@@ -1,4 +1,4 @@
-// Package ollama streams completions from an ollama server (demo-desktop).
+// Package ollama streams completions from an ollama server.
 package ollama
 
 import (
@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nvii/charmulet/internal/core/provider"
+	"github.com/nviiiivn/charmulet/internal/core/provider"
 )
 
 var _ provider.Provider = (*Client)(nil)

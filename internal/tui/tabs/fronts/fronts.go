@@ -7,9 +7,12 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"fmt"
-	"github.com/nvii/charmulet/internal/tui/tabs"
-	"github.com/nvii/charmulet/internal/tui/theme"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs"
+	"github.com/nviiiivn/charmulet/internal/tui/theme"
+	toml "github.com/pelletier/go-toml/v2"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -24,29 +27,52 @@ type Front struct {
 	URL  string
 }
 
+// defaults is what FRONTS watches when there is no fronts.toml: the two
+// local services charmulet itself talks to. Your own list goes in
+// <config dir>/fronts.toml (see fronts.example.toml in the repo).
 var defaults = []Front{
-	// public fronts (caddy)
-	{"iamprettyfamous.online", "https://iamprettyfamous.online"},
-	{"umb.alola.lol", "https://umb.alola.lol"},
-	{"umb wiki", "https://umb.alola.lol/wiki"},
-	{"git.alola.lol", "https://git.alola.lol"},
-	{"comfyui.alola.lol", "https://comfyui.alola.lol"},
-	{"auth.alola.lol", "https://auth.alola.lol"},
-	// demo-server locals
+	{"ollama api", "http://localhost:11434"},
 	{"dashbored", "http://localhost:6900"},
-	{"gitea", "http://localhost:3100"},
-	{"glance", "http://localhost:6908"},
-	{"searxng", "http://localhost:8888"},
-	{"valhalla", "http://localhost:8002"},
-	{"tradesight", "http://localhost:8915"},
-	{"mkt-dash", "http://localhost:8502"},
-	{"openclaw gw", "http://localhost:18789"},
-	// demo-desktop
-	{"comfy direct", "http://192.0.2.24:8188"},
-	{"gallery", "http://192.0.2.24:8189"},
-	{"umb direct", "http://192.0.2.24:8910"},
-	{"sparkbook", "http://192.0.2.24:8911"},
-	{"ollama api", "http://192.0.2.24:11434"},
+}
+
+// frontsFile is <config dir>/fronts.toml, CHARMULET_CONFIG_DIR-aware.
+func frontsFile() string {
+	if v := os.Getenv("CHARMULET_CONFIG_DIR"); v != "" {
+		return filepath.Join(v, "fronts.toml")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "fronts.toml"
+	}
+	return filepath.Join(home, ".config", "charmulet", "fronts.toml")
+}
+
+// load reads fronts.toml ([[front]] name/url tables). A missing, unreadable
+// or empty file falls back to defaults, so the tab never opens blank.
+func load() []Front {
+	raw, err := os.ReadFile(frontsFile())
+	if err != nil {
+		return append([]Front(nil), defaults...)
+	}
+	var file struct {
+		Front []struct {
+			Name string `toml:"name"`
+			URL  string `toml:"url"`
+		} `toml:"front"`
+	}
+	if err := toml.Unmarshal(raw, &file); err != nil {
+		return append([]Front(nil), defaults...)
+	}
+	var out []Front
+	for _, f := range file.Front {
+		if f.Name != "" && f.URL != "" {
+			out = append(out, Front{Name: f.Name, URL: f.URL})
+		}
+	}
+	if len(out) == 0 {
+		return append([]Front(nil), defaults...)
+	}
+	return out
 }
 
 type result struct {
@@ -78,7 +104,7 @@ type Model struct {
 var _ tabs.Tab = (*Model)(nil)
 
 func New(th theme.Theme) *Model {
-	fs := append([]Front(nil), defaults...)
+	fs := load()
 	sort.Slice(fs, func(i, j int) bool { return fs[i].Name < fs[j].Name })
 	return &Model{th: th, fronts: fs}
 }

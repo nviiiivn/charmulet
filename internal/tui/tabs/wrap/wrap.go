@@ -12,9 +12,9 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/nvii/charmulet/internal/core/wrappers"
-	"github.com/nvii/charmulet/internal/tui/tabs"
-	"github.com/nvii/charmulet/internal/tui/theme"
+	"github.com/nviiiivn/charmulet/internal/core/wrappers"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs"
+	"github.com/nviiiivn/charmulet/internal/tui/theme"
 )
 
 var nextID atomic.Int64
@@ -67,6 +67,7 @@ func New(th theme.Theme, w wrappers.Wrapper) (*Model, error) {
 	}
 	m.ta = textarea.New()
 	m.ta.Placeholder = "send to container…"
+	m.ta.Focus() // an unfocused bubbles textarea drops every key
 	m.vp = viewport.New()
 	return m, nil
 }
@@ -198,3 +199,6 @@ func (m *Model) View() string {
 	}
 	return status + "\n" + m.vp.View() + "\n" + input
 }
+
+// Typing is true while there is text in the box (see tabs.Typer).
+func (m *Model) Typing() bool { return strings.TrimSpace(m.ta.Value()) != "" }

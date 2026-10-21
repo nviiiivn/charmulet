@@ -11,24 +11,24 @@ import (
 	"github.com/charmbracelet/fang"
 	"github.com/spf13/cobra"
 
-	"github.com/nvii/charmulet/internal/core/config"
-	"github.com/nvii/charmulet/internal/core/provider"
-	"github.com/nvii/charmulet/internal/core/session"
-	"github.com/nvii/charmulet/internal/providers/ollama"
-	"github.com/nvii/charmulet/internal/tui/shell"
-	"github.com/nvii/charmulet/internal/tui/tabs"
-	"github.com/nvii/charmulet/internal/tui/tabs/agents"
-	changestabs "github.com/nvii/charmulet/internal/tui/tabs/changes"
-	"github.com/nvii/charmulet/internal/tui/tabs/chat"
-	filestabs "github.com/nvii/charmulet/internal/tui/tabs/files"
-	frontstabs "github.com/nvii/charmulet/internal/tui/tabs/fronts"
-	launchtabs "github.com/nvii/charmulet/internal/tui/tabs/launch"
-	pagestabs "github.com/nvii/charmulet/internal/tui/tabs/pages"
-	"github.com/nvii/charmulet/internal/tui/tabs/runs"
-	servicestabs "github.com/nvii/charmulet/internal/tui/tabs/services"
-	sessionstabs "github.com/nvii/charmulet/internal/tui/tabs/sessions"
-	settingstabs "github.com/nvii/charmulet/internal/tui/tabs/settings"
-	"github.com/nvii/charmulet/internal/tui/theme"
+	"github.com/nviiiivn/charmulet/internal/core/config"
+	"github.com/nviiiivn/charmulet/internal/core/provider"
+	"github.com/nviiiivn/charmulet/internal/core/session"
+	"github.com/nviiiivn/charmulet/internal/providers/ollama"
+	"github.com/nviiiivn/charmulet/internal/tui/shell"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs/agents"
+	changestabs "github.com/nviiiivn/charmulet/internal/tui/tabs/changes"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs/chat"
+	filestabs "github.com/nviiiivn/charmulet/internal/tui/tabs/files"
+	frontstabs "github.com/nviiiivn/charmulet/internal/tui/tabs/fronts"
+	launchtabs "github.com/nviiiivn/charmulet/internal/tui/tabs/launch"
+	pagestabs "github.com/nviiiivn/charmulet/internal/tui/tabs/pages"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs/runs"
+	servicestabs "github.com/nviiiivn/charmulet/internal/tui/tabs/services"
+	sessionstabs "github.com/nviiiivn/charmulet/internal/tui/tabs/sessions"
+	settingstabs "github.com/nviiiivn/charmulet/internal/tui/tabs/settings"
+	"github.com/nviiiivn/charmulet/internal/tui/theme"
 )
 
 func loadTheme(name string) theme.Theme {
@@ -102,7 +102,7 @@ func runTUI(themeName, resumeQuery, version string) error {
 	if themeName == "" && !configExists() {
 		cfg, err := config.Load()
 		if err != nil {
-			cfg = &config.Config{OllamaURL: "http://192.0.2.24:11434", ChatModel: "qwen3.5:9b"}
+			cfg = &config.Config{OllamaURL: "http://localhost:11434", ChatModel: "qwen3.5:9b"}
 		}
 		if cfg, err = runSetup(cfg, "themes"); err == nil {
 			_ = config.Save(cfg)
@@ -114,7 +114,7 @@ func runTUI(themeName, resumeQuery, version string) error {
 	th := loadTheme(themeName)
 	cfg, err := config.Load()
 	if err != nil {
-		cfg = &config.Config{OllamaURL: "http://192.0.2.24:11434", ChatModel: "qwen3.5:9b"}
+		cfg = &config.Config{OllamaURL: "http://localhost:11434", ChatModel: "qwen3.5:9b"}
 	}
 	prov := ollama.New(cfg.OllamaURL)
 
@@ -180,7 +180,7 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
 			if err != nil {
-				cfg = &config.Config{OllamaURL: "http://192.0.2.24:11434", ChatModel: "qwen3.5:9b"}
+				cfg = &config.Config{OllamaURL: "http://localhost:11434", ChatModel: "qwen3.5:9b"}
 			}
 			if cfg, err = runSetup(cfg, "themes"); err != nil {
 				return err

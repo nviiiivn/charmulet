@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nvii/charmulet/internal/homelab"
+	"github.com/nviiiivn/charmulet/internal/homelab"
 )
 
 func TestSaveListRoundtrip(t *testing.T) {

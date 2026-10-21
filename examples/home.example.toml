@@ -1,0 +1,25 @@
+# A PAGES tab page. Copy to ~/.config/charmulet/pages/home.toml.
+# Widgets fill the grid in order. "machine" is a key from your dashbored
+# feed (the machine names in dashbored's config).
+name = "home"
+columns = 2
+
+[[widget]]
+kind = "system"
+machine = "demo-desktop"
+
+[[widget]]
+kind = "system"
+machine = "demo-server"
+
+[[widget]]
+kind = "ollama"
+machine = "demo-desktop"
+
+[[widget]]
+kind = "clock"
+
+[[widget]]
+kind = "note"
+title = "todo"
+text = "pages are plain TOML: edit, save, press r"

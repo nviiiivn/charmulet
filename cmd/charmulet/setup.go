@@ -3,8 +3,8 @@ package main
 import (
 	"charm.land/huh/v2"
 
-	"github.com/nvii/charmulet/internal/core/config"
-	"github.com/nvii/charmulet/internal/tui/theme"
+	"github.com/nviiiivn/charmulet/internal/core/config"
+	"github.com/nviiiivn/charmulet/internal/tui/theme"
 )
 
 // runSetup is the first-run wizard (also `charmulet setup`): ollama URL,
@@ -29,8 +29,8 @@ func runSetup(cfg *config.Config, themesDir string) (*config.Config, error) {
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
-				Title("Ollama URL (demo-desktop)").
-				Description("e.g. http://192.0.2.24:11434").
+				Title("Ollama URL").
+				Description("e.g. http://localhost:11434").
 				Value(&url),
 			huh.NewInput().
 				Title("Default chat model").

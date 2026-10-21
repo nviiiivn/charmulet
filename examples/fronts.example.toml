@@ -1,0 +1,38 @@
+# Copy to ~/.config/charmulet/fronts.toml. The FRONTS tab checks each URL
+# every 10 seconds. Any HTTP answer counts as up; only a network error is down.
+# Without this file FRONTS watches just ollama and dashbored on localhost.
+
+# public sites
+[[front]]
+name = "iamprettyfamous.online"
+url = "https://iamprettyfamous.online"
+
+[[front]]
+name = "umb.alola.lol"
+url = "https://umb.alola.lol"
+
+[[front]]
+name = "git.alola.lol"
+url = "https://git.alola.lol"
+
+# services on this machine
+[[front]]
+name = "dashbored"
+url = "http://localhost:6900"
+
+[[front]]
+name = "gitea"
+url = "http://localhost:3100"
+
+[[front]]
+name = "searxng"
+url = "http://localhost:8888"
+
+# services on another machine on your network
+[[front]]
+name = "ollama api"
+url = "http://192.0.2.24:11434"
+
+[[front]]
+name = "comfyui"
+url = "http://192.0.2.24:8188"

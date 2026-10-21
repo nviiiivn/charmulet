@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nvii/charmulet/internal/core/provider"
+	"github.com/nviiiivn/charmulet/internal/core/provider"
 )
 
 func TestModelsParsesAndCaches(t *testing.T) {

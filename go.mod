@@ -1,4 +1,4 @@
-module github.com/nvii/charmulet
+module github.com/nviiiivn/charmulet
 
 go 1.25.8
 

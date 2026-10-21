@@ -1,0 +1,14 @@
+# An agent CLI that LAUNCH can start in a docker container.
+# Copy to ~/.config/charmulet/wrappers/<name>.toml. A file with the same name
+# as a built-in (crush, claude, codex, opencode, ...) overrides it.
+# Built-ins ship with no image: charmulet never picks an image to pull for you.
+name = "crush"
+desc = "charmbracelet crush, Go agent CLI"
+image = "ghcr.io/example/crush:latest"
+cmd = ["crush"]
+# Passed as -e. Name only (no "=") forwards the value from your environment.
+env = ["OPENAI_API_KEY"]
+volumes = ["/home/demo/projects:/work"]
+ports = []
+# true = what you type in the tab goes to the container's stdin
+interactive = true

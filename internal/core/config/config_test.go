@@ -50,7 +50,7 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if cfg.OllamaURL != "http://192.0.2.24:11434" {
+	if cfg.OllamaURL != "http://localhost:11434" {
 		t.Fatalf("hardcoded fallback: %q", cfg.OllamaURL)
 	}
 	if cfg.ChatModel != "qwen3.5:9b" {

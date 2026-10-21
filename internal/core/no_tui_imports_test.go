@@ -22,8 +22,8 @@ func TestCoreNeverImportsTUI(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if strings.Contains(string(raw), `"github.com/nvii/charmulet/internal/tui`) ||
-			strings.Contains(string(raw), `"github.com/nvii/charmulet/internal/server`) {
+		if strings.Contains(string(raw), `"github.com/nviiiivn/charmulet/internal/tui`) ||
+			strings.Contains(string(raw), `"github.com/nviiiivn/charmulet/internal/server`) {
 			t.Errorf("core file imports tui/server (forbidden): %s", path)
 		}
 		return nil

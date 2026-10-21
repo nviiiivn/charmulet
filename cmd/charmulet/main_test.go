@@ -4,9 +4,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nvii/charmulet/internal/core/config"
-	"github.com/nvii/charmulet/internal/core/session"
-	"github.com/nvii/charmulet/internal/tui/theme"
+	"github.com/nviiiivn/charmulet/internal/core/config"
+	"github.com/nviiiivn/charmulet/internal/core/session"
+	"github.com/nviiiivn/charmulet/internal/tui/theme"
 )
 
 func openStore(t *testing.T) *session.Store {

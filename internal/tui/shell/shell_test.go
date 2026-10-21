@@ -5,8 +5,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/nvii/charmulet/internal/tui/tabs"
-	"github.com/nvii/charmulet/internal/tui/theme"
+	"github.com/nviiiivn/charmulet/internal/tui/tabs"
+	"github.com/nviiiivn/charmulet/internal/tui/theme"
 )
 
 // fake is a recording tab: every lifecycle call appends to trace.
@@ -230,5 +230,42 @@ func TestSplashSwallowsFirstKey(t *testing.T) {
 	}
 	if !contains(fs[0].trace, "esc") {
 		t.Fatal("esc after splash never reached the tab")
+	}
+}
+
+// typer is a fake tab with a text box that is (or is not) in use.
+type typer struct {
+	fake
+	typing bool
+}
+
+func (t *typer) Typing() bool { return t.typing }
+func (t *typer) Update(msg tea.Msg) (tabs.Tab, tea.Cmd) {
+	t.gotMsgs = append(t.gotMsgs, msg)
+	return t, nil
+}
+
+func TestTypingKeepsDigitsAndHelpAsText(t *testing.T) {
+	a := &typer{fake: fake{id: "a"}, typing: true}
+	m := New(theme.Default(), a, &fake{id: "b"})
+	m.splash = false
+	m.w, m.h = 80, 24
+
+	m.Update(digit("2"))
+	if m.active != 0 {
+		t.Fatalf("a digit typed into a text box must not jump tabs (active=%d)", m.active)
+	}
+	m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
+	if m.help {
+		t.Fatal(`a "?" typed into a text box must not open help`)
+	}
+	if len(a.gotMsgs) != 2 {
+		t.Fatalf("both keys must reach the tab, got %d", len(a.gotMsgs))
+	}
+
+	a.typing = false
+	m.Update(digit("2"))
+	if m.active != 1 {
+		t.Fatal("with an empty box, digits jump tabs again")
 	}
 }
